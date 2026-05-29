@@ -12,6 +12,10 @@ using XEngine.Core.Scenery;
 
 namespace WinFormsUI.Game.Drop
 {
+    /// <summary>
+    /// Строитель для создания сущностей выпавшего оружия на сцене.
+    /// Позволяет настроить физические параметры, время жизни и визуальное отображение перед спавном.
+    /// </summary>
     public struct DropBuilder
     {
         private static readonly B2Vec2 size = new(0.5f, 0.25f);
@@ -27,23 +31,44 @@ namespace WinFormsUI.Game.Drop
             item = Item;
         }
 
+        /// <summary>
+        /// Создает новый экземпляр строителя для указанного оружия.
+        /// </summary>
+        /// <param name="item">Экземпляр оружия.</param>
+        /// <returns>Новый экземпляр DropBuilder.</returns>
         public static DropBuilder Init(WeaponItem item)
         {
             return new(item);
         }
 
+        /// <summary>
+        /// Задает время жизни предмета до автоматического удаления.
+        /// </summary>
+        /// <param name="time">Время в секундах.</param>
+        /// <returns>Текущий экземпляр строителя.</returns>
         public DropBuilder SetExpirationTime(float time)
         {
             expirationTime = time;
             return this;
         }
 
+        /// <summary>
+        /// Разрешает или запрещает подбор предмета.
+        /// </summary>
+        /// <param name="value">Флаг возможности подбора.</param>
+        /// <returns>Текущий экземпляр строителя.</returns>
         public DropBuilder CanPickup(bool value)
         {
             canPickup = value;
             return this;
         }
 
+        /// <summary>
+        /// Задает начальную линейную и угловую скорость физического тела.
+        /// </summary>
+        /// <param name="linear">Линейная скорость.</param>
+        /// <param name="angular">Угловая скорость.</param>
+        /// <returns>Текущий экземпляр строителя.</returns>
         public DropBuilder SetVelocity(Vector2 linear, float angular = 0)
         {
             linVel = new(linear.X, linear.Y);
@@ -51,7 +76,20 @@ namespace WinFormsUI.Game.Drop
             return this;
         }
 
+        /// <summary>
+        /// Создает сущность предмета на сцене в указанной позиции.
+        /// </summary>
+        /// <param name="scene">Целевая сцена.</param>
+        /// <param name="pos">Позиция спавна.</param>
+        /// <returns>Созданная сущность.</returns>
         public readonly Entity Spawn(GScene scene, Vector3 pos) => Spawn(scene, new TransformValues() { Position = pos });
+
+        /// <summary>
+        /// Создает сущность предмета на сцене с заданными параметрами трансформации.
+        /// </summary>
+        /// <param name="scene">Целевая сцена.</param>
+        /// <param name="values">Параметры трансформации (позиция, поворот).</param>
+        /// <returns>Созданная сущность.</returns>
         public readonly Entity Spawn(GScene scene, TransformValues values)
         {
             var e = scene.SpawnEntity();

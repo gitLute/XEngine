@@ -6,11 +6,18 @@ using static WinFormsUI.Game.Player.Contol.ActionType;
 
 namespace WinFormsUI.Game.Player.PlayerStates
 {
+    /// <summary>
+    /// Состояние лазания по лестнице.
+    /// Отключает гравитацию и позволяет перемещаться вверх/вниз и в стороны.
+    /// </summary>
     internal class ClimbState : IPlayerState
     {
         public string DebugName => "Climbing";
-        public float savedGravity = 0;
+        private float savedGravity = 0;
 
+        /// <summary>
+        /// Отключает гравитацию и устанавливает анимацию падения/лазания.
+        /// </summary>
         public void Enter(GPlayer player, GScene scene)
         {
             savedGravity = player.Body.GravityScale;
@@ -18,6 +25,9 @@ namespace WinFormsUI.Game.Player.PlayerStates
             player.Model.SetFalling();
         }
 
+        /// <summary>
+        /// Восстанавливает стандартную гравитацию.
+        /// </summary>
         public void Exit(GPlayer player, GScene scene)
         {
             player.Body.GravityScale = savedGravity;

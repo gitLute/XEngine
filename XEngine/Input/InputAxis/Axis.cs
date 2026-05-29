@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using XEngine.Core.Utils;
 
 namespace XEngine.Core.Input.InputAxis
 {
@@ -16,7 +17,10 @@ namespace XEngine.Core.Input.InputAxis
         public float Sensitivity = settings.Sensitivity;
         public float Value { get; private set; } = 0;
 
-        public void Update(InputManager input, float dt)
+        /// <summary>
+        /// Обновление оси 
+        /// </summary>
+        public void Update(IInputService input, float dt)
         {
             float target = 0;
             float current = Value;
@@ -24,16 +28,10 @@ namespace XEngine.Core.Input.InputAxis
             if (input.IsActionActive(Positive)) target += 1;
             if (input.IsActionActive(Negative)) target -= 1;
 
-            if (target != 0) current = MoveTowards(current, target, Sensitivity * dt);
-            else current = MoveTowards(current, 0, Gravity * dt);
+            if (target != 0) current = MathUtils.MoveToward(current, target, Sensitivity * dt);
+            else current = MathUtils.MoveToward(current, 0, Gravity * dt);
 
             Value = current;
-        }
-
-        private static float MoveTowards(float current, float target, float maxDelta)
-        {
-            if (Math.Abs(target - current) <= maxDelta) return target;
-            return current + Math.Sign(target - current) * maxDelta;
         }
     }
 }

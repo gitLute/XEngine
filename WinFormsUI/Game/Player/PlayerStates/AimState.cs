@@ -4,6 +4,10 @@ using static WinFormsUI.Game.Player.Contol.ActionType;
 
 namespace WinFormsUI.Game.Player.PlayerStates
 {
+    /// <summary>
+    /// Состояние прицеливания игрока.
+    /// Управляет оружием, анимацией и логикой стрельбы или сброса оружия.
+    /// </summary>
     internal class AimState : IPlayerState
     {
         private const float Lim = 0.05f;
@@ -14,6 +18,9 @@ namespace WinFormsUI.Game.Player.PlayerStates
         private WeaponItem? currentWeapon = null!;
         public string DebugName => "Aiming";
 
+        /// <summary>
+        /// Инициализирует оружие и визуальную модель.
+        /// </summary>
         public void Enter(GPlayer player, GScene scene)
         {
             if (!player.Weaponry.TryTake(out currentWeapon))
@@ -27,10 +34,13 @@ namespace WinFormsUI.Game.Player.PlayerStates
             player.Model.SetAiming();
         }
 
+        /// <summary>
+        /// Возвращает оружие в инвентарь и сбрасывает текстуры.
+        /// </summary>
         public void Exit(GPlayer player, GScene scene)
         {
             player.Model.SetFacingDiecration(player.IsRightFacing ? 1 : -1);
-            player.Model.SetWeaponTexture();
+            player.Model.ResetWeaponTexture();
             player.Weaponry.Equip(currentWeapon);
             player.Model.UpdatePockets(player.Weaponry);
         }

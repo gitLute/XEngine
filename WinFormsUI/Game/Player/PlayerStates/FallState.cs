@@ -4,14 +4,25 @@ using static WinFormsUI.Game.Player.Contol.ActionType;
 
 namespace WinFormsUI.Game.Player.PlayerStates
 {
+    /// <summary>
+    /// Состояние свободного падения или полета.
+    /// Управляет горизонтальным движением в воздухе и возможностью начала подъема по лестнице.
+    /// </summary>
     internal class FallState : IPlayerState
     {
         public string DebugName => "Falling";
 
+        /// <summary>
+        /// Устанавливает анимацию прыжка/падения.
+        /// </summary>
         public void Enter(GPlayer player, GScene scene) { player.Model.SetFalling(); }
 
         public void Exit(GPlayer player, GScene scene) { }
 
+        /// <summary>
+        /// Обрабатывает ввод в воздухе: движение, попытку прыжка (если разрешено таймером), смену оружия.
+        /// Проверяет контакт с землей или лестницей для смены состояния.
+        /// </summary>
         public void ProcessInput(GPlayer player, GScene scene, float dt)
         {
             if (player.Control.Fetch("up", ActionActive) && player.Contacts.Has(LADDER))

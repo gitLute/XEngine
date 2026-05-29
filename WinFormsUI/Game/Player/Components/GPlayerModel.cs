@@ -9,6 +9,10 @@ using XEngine.Core.Utils;
 
 namespace WinFormsUI.Game.Player.Components
 {
+    /// <summary>
+    /// Компонент визуальной модели игрока.
+    /// Управляет анимацией, отображением оружия и частей тела.
+    /// </summary>
     public sealed class GPlayerModel : GameComponent, IDisposable
     {
         private const float depth = 0.3f;
@@ -30,6 +34,11 @@ namespace WinFormsUI.Game.Player.Components
         public readonly GameTimer WalkTimer = new(0.15f, true);
         private int Frame = 0;
 
+        /// <summary>
+        /// Инициализирует модель игрока: создает дочерние сущности для головы, оружия и карманов, настраивает анимацию ходьбы.
+        /// </summary>
+        /// <param name="config">Конфигурация игрока.</param>
+        /// <returns>Текущий экземпляр компонента.</returns>
         public GPlayerModel Init(PlayerConfig config)
         {
             Owner.AddComponent<GSprite>()
@@ -56,7 +65,7 @@ namespace WinFormsUI.Game.Player.Components
             return this;
         }
 
-        #region TextreSet
+        #region Texture Set
         private void WalkAnim()
         {
             Frame++;
@@ -76,12 +85,18 @@ namespace WinFormsUI.Game.Player.Components
             Frame = 0;
         }
 
+        /// <summary>
+        /// Переключает состояние модели на движение. Запускает таймер анимации ходьбы.
+        /// </summary>
         public void SetMoving()
         {
             SetHeadTexture($"{Base}/HeadMove.png");
             if (!WalkTimer.IsRunning) WalkTimer.Start();
         }
 
+        /// <summary>
+        /// Переключает состояние модели на ожидание (idle). Останавливает анимацию ходьбы.
+        /// </summary>
         public void SetIdling()
         {
             SetHeadTexture($"{Base}/HeadIdle.png");
@@ -89,6 +104,9 @@ namespace WinFormsUI.Game.Player.Components
             StopWalkAnim();
         }
 
+        /// <summary>
+        /// Переключает состояние модели на падение/прыжок. Останавливает анимацию ходьбы.
+        /// </summary>
         public void SetFalling()
         {
             SetHeadTexture($"{Base}/HeadIdle.png");
@@ -96,6 +114,9 @@ namespace WinFormsUI.Game.Player.Components
             StopWalkAnim();
         }
 
+        /// <summary>
+        /// Переключает состояние модели на прицеливание. Останавливает анимацию ходьбы.
+        /// </summary>
         public void SetAiming()
         {
             SetHeadTexture($"{Base}/HeadAiming.png");
@@ -106,17 +127,30 @@ namespace WinFormsUI.Game.Player.Components
 
         private void SetBodyTexture(string path) => SetTextureOnEntity(Owner, path);
         private void SetHeadTexture(string path) => SetTextureOnEntity(HeadEntity, path);
+
+        /// <summary>
+        /// Устанавливает текстуру текущего экипированного оружия.
+        /// </summary>
+        /// <param name="item">Экземпляр оружия.</param>
         public void SetWeaponTexture(WeaponItem item)
         {
             if (WeaponEntity.TryGet<GSprite>(out var sprite)) sprite
                     .SetTexture(item.SavedTexture)
                     .SetSize(item.TexSize);
         }
-        public void SetWeaponTexture()
+
+        /// <summary>
+        /// Сбрасывает текстуру оружия на стандартную (None.png).
+        /// </summary>
+        public void ResetWeaponTexture()
         {
             if (WeaponEntity.TryGet<GSprite>(out var sprite)) sprite.SetTexture(NoneTexture);
         }
 
+        /// <summary>
+        /// Обновляет отображение оружия в карманах на основе состояния компонента GWeaponry.
+        /// </summary>
+        /// <param name="weaponry">Компонент управления оружием.</param>
         public void UpdatePockets(GWeaponry weaponry)
         {
             if (PocketLeft.TryGet<GSprite>(out var lSprite))
@@ -138,6 +172,12 @@ namespace WinFormsUI.Game.Player.Components
             if (entity.TryGet<GSprite>(out var sprite)) sprite.SetTexture(tex);
         }
 
+        /// <summary>
+        /// Устанавливает направление взгляда игрока и поворачивает части тела соответственно.
+        /// </summary>
+        /// <param name="x">Координата X направления.</param>
+        /// <param name="y">Координата Y направления.</param>
+        /// <returns>True, если игрок смотрит вправо; иначе false.</returns>
         public bool SetFacingDiecration(float x, float y = 0)
         {
             bool isLeft = x < 0;
@@ -177,6 +217,9 @@ namespace WinFormsUI.Game.Player.Components
             return e;
         }
 
+        /// <summary>
+        /// Освобождает ресурсы, снимает таймер анимации.
+        /// </summary>
         public void Dispose()
         {
             Owner.Scene.UnregisterTimer(WalkTimer);

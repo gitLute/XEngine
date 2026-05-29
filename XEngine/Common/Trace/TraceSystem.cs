@@ -5,6 +5,9 @@ using XEngine.Core.Scenery;
 
 namespace XEngine.Core.Common.Trace
 {
+    /// <summary>
+    /// Система обновления следов. Добавляет текущую позицию объекта в очередь и удаляет старые точки, превышающие лимит длины.
+    /// </summary>
     public class TraceSystem : IGameSystem
     {
         private const float Eps = 1e-6f;
@@ -12,6 +15,11 @@ namespace XEngine.Core.Common.Trace
 
         public bool IsEnabled { get; set; } = true;
 
+        /// <summary>
+        /// Обновляет состояние всех активных следов в сцене.
+        /// </summary>
+        /// <param name="_scene">Текущая сцена.</param>
+        /// <param name="_dt">Время, прошедшее с последнего кадра.</param>
         public void Update(GScene _scene, float _dt)
         {
             foreach (var(e, trace, tr) in _scene.Query<GTrace, GTransform>())

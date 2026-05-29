@@ -1,23 +1,23 @@
 ﻿using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using XEngine.Core.Common.Sprite;
 using XEngine.Core.Common.Transform;
 using XEngine.Core.Graphics;
 using XEngine.Core.Graphics.OpenGL;
 using XEngine.Core.Scenery;
-using static OpenTK.Graphics.OpenGL.GL;
 
 namespace XEngine.Core.Common.Health
 {
+    /// <summary>
+    /// Модуль отрисовки базовых индикаторов здоровья. Визуализирует полоски HP поверх объектов с использованием прямоугольников.
+    /// </summary>
     public class BasicHealthRenderModule(GLProvider provider) : RenderModule(provider)
     {
         public override int Priority => 200;
 
+        /// <summary>
+        /// Отрисовывает все активные индикаторы здоровья в сцене.
+        /// </summary>
+        /// <param name="scene">Текущая сцена.</param>
         public override void Render(GScene scene)
         {
             if (_screenSize.X <= 0 || _screenSize.Y <= 0) return;
@@ -25,7 +25,7 @@ namespace XEngine.Core.Common.Health
 
             _shader.Use();
 
-            _shader.SetMatrix4("uProjection", scene.Camera.GetProjectionMatrix(_screenSize));
+            _shader.SetMatrix4("uProjection", GetProjectionMatrix(_screenSize));
             _shader.SetMatrix4("uView", scene.Camera.GetViewMatrix());
 
             _provider.UnitQuad.Bind();
@@ -51,6 +51,12 @@ namespace XEngine.Core.Common.Health
             GL.BindVertexArray(0);
         }
 
+        /// <summary>
+        /// Формирует матрицу модели для прямоугольника на основе его границ и слоя отрисовки.
+        /// </summary>
+        /// <param name="box">Границы прямоугольника.</param>
+        /// <param name="layer">Z-координата (слой) для правильного наложения.</param>
+        /// <returns>Матрица трансформации 4x4.</returns>
         private static Matrix4 GetModel(Box2 box, float layer)
         {
             var size = box.Size;

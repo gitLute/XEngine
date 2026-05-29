@@ -1,5 +1,8 @@
 ﻿namespace WinFormsUI.Game.Player.Stats
 {
+    /// <summary>
+    /// Базовая реализация характеристик игрока, основанная на конфигурации.
+    /// </summary>
     public class PlayerStats(PlayerConfig config) : IPlayerStats
     {
         public float TopSpeed { get; private set; } = config.Speed;

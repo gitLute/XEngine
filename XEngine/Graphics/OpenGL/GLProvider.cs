@@ -1,13 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+﻿using System.Diagnostics;
 
 namespace XEngine.Core.Graphics.OpenGL
 {
+    /// <summary>
+    /// Класс для работы с OpenGL ресурсасм: управляет шейдерами, UnitQuad и сборщиком линий.
+    /// </summary>
     public sealed class GLProvider(string shaderFolder) : IDisposable
     {
         private readonly Dictionary<string, Shader> _shaders = [];
@@ -17,6 +14,9 @@ namespace XEngine.Core.Graphics.OpenGL
         public UnitQuad UnitQuad { get; private set; } = new UnitQuad();
         public LineBatcher LineBatcher { get; private set; } = new LineBatcher();
 
+        /// <summary>
+        /// Инициализирует базовые графические ресурсы (квад, линии, основные шейдеры).
+        /// </summary>
         public void Init()
         {
             UnitQuad.Init();
@@ -25,6 +25,10 @@ namespace XEngine.Core.Graphics.OpenGL
             InitErrorShader();
         }
 
+        /// <summary>
+        /// Возвращает шейдер по имени или аварийный шейдер, если запрошенный не найден.
+        /// </summary>
+        /// <param name="name">Имя шейдера.</param>
         public Shader GetShader(string name)
         {
             if (_shaders.TryGetValue(name, out var shader)) return shader;
@@ -35,11 +39,10 @@ namespace XEngine.Core.Graphics.OpenGL
         }
 
         /// <summary>
-        /// Uses Shader.FromFolder
+        /// Загружает шейдер из папки /Assets/Shaders и кэширует его.
         /// </summary>
-        /// <param name="path">Path in Assets/Shaders/</param>
-        /// <param name="name">Internal shader name to set</param>
-        /// <returns></returns>
+        /// <param name="path">Относительный путь внутри папки шейдеров.</param>
+        /// <param name="name">Внутреннее имя для доступа к шейдеру.</param>
         public Shader LoadShader(string path, string name)
         {
             if (_shaders.TryGetValue(name, out Shader? value)) return value;
@@ -59,6 +62,9 @@ namespace XEngine.Core.Graphics.OpenGL
             _shaders["Sprite"] = Shader.FromFolder(_shaderPath);
         }
 
+        /// <summary>
+        /// Освобождает все загруженные шейдеры.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;

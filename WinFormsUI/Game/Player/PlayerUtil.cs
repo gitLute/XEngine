@@ -10,18 +10,31 @@ using static XEngine.Core.Box2DCompat.B2Helpers;
 
 namespace WinFormsUI.Game.Player
 {
-    public class PlayerFactory
+    /// <summary>
+    /// Утилита для создания сущностей игроков на основе конфигурации.
+    /// Реализует паттерн Одиночка (Singleton).
+    /// </summary>
+    public class PlayerUtil
     {
         private readonly static float _r = 0.5f * GPlayerModel.PLAYER_SIZE.X;
 
         private readonly ConfigLoader<PlayerConfig> configLoader;
-        private static readonly Lazy<PlayerFactory> _instance = new(() => new PlayerFactory());
-        public static PlayerFactory Instance => _instance.Value;
-        private PlayerFactory()
+        private static readonly Lazy<PlayerUtil> _instance = new(() => new PlayerUtil());
+        public static PlayerUtil Instance => _instance.Value;
+        private PlayerUtil()
         {
             configLoader = new(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "Config", "players.json"));
         }
 
+        /// <summary>
+        /// Создает и размещает сущность игрока на сцене.
+        /// </summary>
+        /// <param name="scene">Сцена, на которой создается игрок.</param>
+        /// <param name="pos">Начальная позиция игрока.</param>
+        /// <param name="name">Имя игрока, используемое для идентификации ввода.</param>
+        /// <param name="playerConfigId">Идентификатор конфигурации игрока.</param>
+        /// <returns>Созданная сущность игрока.</returns>
+        /// <exception cref="ArgumentException">Выбрасывается, если конфигурация с указанным ID не найдена.</exception>
         public Entity CreatePlayer(GScene scene, B2Vec2 pos, string name, string playerConfigId)
         {
             if (!configLoader.TryGetConfig(playerConfigId, out var config)) throw new ArgumentException("player Id not found");
@@ -56,7 +69,6 @@ namespace WinFormsUI.Game.Player
             return playerEntity;
         }
 
-        private const ContactFlags PlayerMask = ContactFlags.SOLID | ContactFlags.PROJECTILE | ContactFlags.ITEM_HITBOX | ContactFlags.EFFECT | ContactFlags.LADDER;
         private static void CreateCollider(B2BodyId bid)
         {
             B2Capsule capsule = MakeCapsule(new(new(-_r, 0), new(_r, GPlayerModel.PLAYER_SIZE.Y)));
@@ -65,7 +77,7 @@ namespace WinFormsUI.Game.Player
             capsuleDef.material.friction = 0.1f;
             capsuleDef.enableSensorEvents = true;
             capsuleDef.filter.categoryBits = (ulong)ContactFlags.PLAYER;
-            capsuleDef.filter.maskBits = (ulong)PlayerMask;
+            capsuleDef.filter.maskBits = (ulong)ContactFlags.PLAYER_MASK;
             B2Shapes.b2CreateCapsuleShape(bid, capsuleDef, capsule);
         }
 
@@ -78,7 +90,11 @@ namespace WinFormsUI.Game.Player
             circleSensorDef.filter.maskBits = (ulong)ContactFlags.SOLID;
             B2Shapes.b2CreateCircleShape(bid, circleSensorDef, new(new(0, _r * 0.9f), _r * 0.95f));
         }
-    
+
+        /// <summary>
+        /// Возвращает список всех доступных идентификаторов конфигураций игроков.
+        /// </summary>
+        /// <returns>Перечисление строк-идентификаторов.</returns>
         public IEnumerable<string> GetIds() => configLoader.GetAllIds();
     }
 }

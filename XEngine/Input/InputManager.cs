@@ -68,6 +68,10 @@ namespace XEngine.Core.Input
 
         public void SetKeyDown(Keys key) => _downKeys.Add(key);
         public void SetKeyUp(Keys key) => _downKeys.Remove(key);
-        public void ClearStates() => _downKeys.Clear();
+        public void ClearStates()
+        {
+            _downKeys.Clear();
+            _previousDownKeys.Clear();
+        }
     }
 }

@@ -12,5 +12,8 @@
         ITEM_HITBOX = 1 << 5,
         EFFECT = 1 << 6,
         LADDER = 1 << 7,
+
+        PLAYER_MASK = SOLID | PROJECTILE | ITEM_HITBOX | EFFECT | LADDER,
+        SOLID_MASK = FOOT | PLAYER | SOLID | PROJECTILE | ITEM,
     }
 }

@@ -17,7 +17,6 @@ namespace WinFormsUI.Game.Player
 {
     public sealed class GPlayer : GameComponent, IDisposable
     {
-        public string Name = "NullPlayer";
         public bool IsRightFacing { get; set; } = true;
 
         public readonly GameTimer JumpTimer = new(0.3f);
@@ -31,6 +30,11 @@ namespace WinFormsUI.Game.Player
 
         public PlayerControl Control { get; private set; } = null!;
 
+        /// <summary>
+        /// Инициализирует все подкомпоненты игрока на основе конфигурации.
+        /// </summary>
+        /// <param name="config">Конфигурация игрока.</param>
+        /// <returns>Текущий экземпляр компонента.</returns>
         public GPlayer Init(PlayerConfig config)
         {
             Body = Owner.Get<GBox2DBody>()!;
@@ -54,18 +58,29 @@ namespace WinFormsUI.Game.Player
             return this;
         }
 
-        public void ProcessInput(GScene scene, float dt)
-        {
-            _state?.ProcessInput(this, scene, dt);
-        }
+        /// <summary>
+        /// Передает ввод текущему активному состоянию машины состояний.
+        /// </summary>
+        /// <param name="scene">Текущая сцена.</param>
+        /// <param name="dt">Время, прошедшее с последнего кадра.</param>
+        public void ProcessInput(GScene scene, float dt) => _state?.ProcessInput(this, scene, dt);
 
+
+        /// <summary>
+        /// Устанавливает имя игрока и обновляет имя в контроллере ввода.
+        /// </summary>
+        /// <param name="name">Новое имя игрока.</param>
+        /// <returns>Текущий экземпляр компонента.</returns>
         public GPlayer SetName(string name)
         {
-            Name = name;
             Control.Name = name;
             return this;
         }
 
+        /// <summary>
+        /// Выполняет выстрел из указанного оружия, создавая снаряды на сцене.
+        /// </summary>
+        /// <param name="weapon">Оружие, из которого производится выстрел.</param>
         public void Shoot(WeaponItem weapon)
         {
             if (weapon == null || weapon.CurrentAmmo <= 0 || !weapon.FireTimer.IsFinished) return;
@@ -84,11 +99,17 @@ namespace WinFormsUI.Game.Player
             {
                 Vector2 spread = MathUtils.FromPolar(scene.GetR01() * weapon.Spread, scene.GetR01() * MathF.Tau);
                 Vector2 vel = MathUtils.FromPolar(weapon.InitialVelocity, angle);
-                scene.Schedule(() => ProjectileFactory.CreateProjectile(weapon.ProjectileId, scene, MuzzlePoint, vel + spread)?
+                scene.Schedule(() => ProjectileCreationUtils.CreateProjectile(weapon.ProjectileId, scene, MuzzlePoint, vel + spread)?
                     .SetSource(Owner.Id));
             }
         }
 
+        /// <summary>
+        /// Выбрасывает указанное оружие на сцену как подбираемый предмет.
+        /// </summary>
+        /// <param name="weapon">Оружие для выброса.</param>
+        /// <param name="expirationTime">Время жизни предмета на сцене.</param>
+        /// <param name="canPickUp">Флаг возможности подбора.</param>
         public void Drop(WeaponItem weapon, float expirationTime = float.MaxValue, bool canPickUp = false)
         {
             if (weapon == null) return;
@@ -106,6 +127,12 @@ namespace WinFormsUI.Game.Player
             scene.Schedule(() => Drop.Spawn(scene, new TransformValues() { Position = (pos.X, pos.Y, 0), Rotation = dir }));
         }
 
+        /// <summary>
+        /// Применяет импульс к физическому телу для горизонтального движения.
+        /// </summary>
+        /// <param name="direction">Направление движения (-1 или 1).</param>
+        /// <param name="dt">Время, прошедшее с последнего кадра.</param>
+        /// <param name="speedscale">Множитель скорости.</param>
         public void Move(float direction, float dt, float speedscale = 1.0f)
         {
             var delta = MathUtils.LimitedStep(Body.LinearVelocity.X, Stats.TopSpeed * direction, Stats.Acceleration * dt);
@@ -114,6 +141,11 @@ namespace WinFormsUI.Game.Player
 
         public IPlayerStats Stats => Effects.GetStats();
 
+        /// <summary>
+        /// Переключает машину состояний игрока на новый тип состояния.
+        /// </summary>
+        /// <typeparam name="T">Тип нового состояния.</typeparam>
+        /// <param name="scene">Текущая сцена.</param>
         public void SwitchTo<T>(GScene scene) where T : IPlayerState, new()
         {
             _state?.Exit(this, scene);
@@ -121,6 +153,9 @@ namespace WinFormsUI.Game.Player
             _state.Enter(this, scene);
         }
 
+        /// <summary>
+        /// Освобождает ресурсы, unregistering таймеры при удалении сущности.
+        /// </summary>
         public void Dispose()
         {
             Owner.Scene.UnregisterTimer(JumpTimer);

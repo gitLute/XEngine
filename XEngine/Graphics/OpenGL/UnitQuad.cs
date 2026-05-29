@@ -1,19 +1,20 @@
 ﻿using OpenTK.Graphics.OpenGL4;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace XEngine.Core.Graphics.OpenGL
 {
-    public class UnitQuad : IDisposable
+    /// <summary>
+    /// Вспомогательный элемент для рисования изображений
+    /// </summary>
+    public sealed class UnitQuad : IDisposable
     {
         private int _vao, _vbo, _ebo;
         private bool _disposed = false;
 
         public UnitQuad() { }
 
+        /// <summary>
+        /// Инициализация после загрузки OpenGL
+        /// </summary>
         public void Init()
         {
             float[] vertices = [ // (x, y) | (u, v)
@@ -44,11 +45,17 @@ namespace XEngine.Core.Graphics.OpenGL
             GL.EnableVertexAttribArray(1);
         }
 
+        /// <summary>
+        /// Привязка (см. OpenGL BindVertexArray)
+        /// </summary>
         public void Bind()
         {
             GL.BindVertexArray(_vao);
         }
 
+        /// <summary>
+        /// Рисование спрайта
+        /// </summary>
         public void Draw()
         {
             if (_disposed) return;
@@ -56,13 +63,10 @@ namespace XEngine.Core.Graphics.OpenGL
             GL.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, 0);
         }
 
+        /// <summary>
+        /// Очистка
+        /// </summary>
         public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
         {
             if (_disposed) return;
             _disposed = true;

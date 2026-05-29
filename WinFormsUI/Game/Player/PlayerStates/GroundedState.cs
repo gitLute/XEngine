@@ -7,10 +7,17 @@ using static WinFormsUI.Game.Box2D.ContactFlags;
 
 namespace WinFormsUI.Game.Player.PlayerStates
 {
+    /// <summary>
+    /// Базовое состояние игрока на земле.
+    /// Управляет ходьбой, прыжками, взаимодействием с предметами и переходом в другие состояния.
+    /// </summary>
     internal class GroundedState : IPlayerState
     {
         public string DebugName => "grounded";
 
+        /// <summary>
+        /// Устанавливает начальную анимацию (покой или движение).
+        /// </summary>
         public void Enter(GPlayer player, GScene scene)
         {
             if (player.Control.HorizotnalInput() == 0) player.Model.SetIdling();

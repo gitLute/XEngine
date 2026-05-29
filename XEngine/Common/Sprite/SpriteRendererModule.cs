@@ -7,10 +7,17 @@ using XEngine.Core.Scenery;
 
 namespace XEngine.Core.Common.Sprite
 {
+    /// <summary>
+    /// Модуль отрисовки стандартных спрайтов. Использует базовый шейдер для вывода текстур на экран.
+    /// </summary>
     public class SpriteRendererModule(GLProvider provider) : RenderModule(provider)
     {
         public override int Priority => 500;
 
+        /// <summary>
+        /// Отрисовывает все активные спрайты в сцене.
+        /// </summary>
+        /// <param name="scene">Текущая сцена.</param>
         public override void Render(GScene scene)
         {
             if (_screenSize.X <= 0 || _screenSize.Y <= 0) return;
@@ -18,7 +25,7 @@ namespace XEngine.Core.Common.Sprite
 
             _shader.Use();
 
-            _shader.SetMatrix4("uProjection", scene.Camera.GetProjectionMatrix(_screenSize));
+            _shader.SetMatrix4("uProjection", GetProjectionMatrix(_screenSize));
             _shader.SetMatrix4("uView", scene.Camera.GetViewMatrix());
             _shader.SetInt("uTexture", 0);
             GL.ActiveTexture(TextureUnit.Texture0);

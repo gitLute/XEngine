@@ -3,6 +3,9 @@ using XEngine.Core.Scenery;
 
 namespace WinFormsUI.Game.Scenes.PlayerSpawner
 {
+    /// <summary>
+    /// Система начального спавна игроков. Находит точки спавна A и B, создает соответствующих игроков и затем самоуничтожается.
+    /// </summary>
     public class PlayerSpawnSystem(string AId, string BId) : IGameSystem
     {
         private bool _AUnset = true;
@@ -12,6 +15,11 @@ namespace WinFormsUI.Game.Scenes.PlayerSpawner
 
         public bool IsEnabled { get; set; } = true;
 
+        /// <summary>
+        /// Проверяет наличие точек спавна с именами "A" и "B". При нахождении планирует создание игроков и удаляет систему из сцены.
+        /// </summary>
+        /// <param name="_scene">Текущая сцена.</param>
+        /// <param name="_dt">Время, прошедшее с последнего кадра (не используется).</param>
         public void Update(GScene _scene, float _dt)
         {
             foreach (var (_, s) in _scene.Query<GPlayerSpawner>())

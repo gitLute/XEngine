@@ -16,8 +16,19 @@ using static XEngine.Core.Box2DCompat.B2Helpers;
 
 namespace WinFormsUI.Game.Combat.Projectiles
 {
-    internal class ProjectileFactory
+    /// <summary>
+    /// Утилита для создания экземпляров снарядов на основе конфигурации.
+    /// </summary>
+    internal static class ProjectileCreationUtils
     {
+        /// <summary>
+        /// Создает и размещает снаряд на сцене.
+        /// </summary>
+        /// <param name="projectileId">Идентификатор типа снаряда из конфигурации.</param>
+        /// <param name="scene">Сцена, на которой создается снаряд.</param>
+        /// <param name="pos">Начальная позиция.</param>
+        /// <param name="vel">Начальная скорость.</param>
+        /// <returns>Созданная сущность или null, если конфигурация не найдена.</returns>
         public static Entity? CreateProjectile(string projectileId, GScene scene, Vector2 pos, Vector2 vel)
         {
             if (!ProjectileConfigLoader.Instance.TryGetConfig(projectileId, out var projConfig))
@@ -39,7 +50,7 @@ namespace WinFormsUI.Game.Combat.Projectiles
                 .SetSizingPolicy(SizingPolicy.Source)
                 .SetSize(Vector2.One * projConfig.Size);
 
-            e.AddComponent<GProjectile>().Init(projConfig);
+            e.AddComponent<GProjectile>().Init(projConfig.Damage);
 
             e.AddComponent<GLifeTime>().Init(projConfig.MaxLifetime);
 
@@ -86,7 +97,6 @@ namespace WinFormsUI.Game.Combat.Projectiles
                 health.DealDamage(damage);
             }
             projectile.Owner.MarkDelete();
-
         }
     }
 }

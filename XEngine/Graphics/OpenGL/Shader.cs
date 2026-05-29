@@ -4,6 +4,9 @@ using System.Diagnostics;
 
 namespace XEngine.Core.Graphics.OpenGL
 {
+    /// <summary>
+    /// Обертка для шейдерной программы OpenGL
+    /// </summary>
     public sealed class Shader : IDisposable
     {
         public int Handle { get; private set; }
@@ -13,11 +16,10 @@ namespace XEngine.Core.Graphics.OpenGL
         private static int _currentBoundHandle = -1;    // видно всем чтобы не менять handle когда не надо
 
         /// <summary>
-        /// Initializes Shader from folder.
-        /// Folder must contain shader.vert and shader.frag
+        /// Инициализация из папки.
+        /// Папка должна содержать shader.vert и shader.frag
         /// </summary>
-        /// <param name="folderPath">folder to shader sources</param>
-        /// <returns></returns>
+        /// <param name="folderPath">Абсолютнвй путь к папке</param>
         public static Shader FromFolder(string folderPath)
         {
             var _vertexPath = Path.Combine(folderPath, "shader.vert");
@@ -25,11 +27,22 @@ namespace XEngine.Core.Graphics.OpenGL
             return new Shader(File.ReadAllText(_vertexPath), File.ReadAllText(_fragentPath));
         }
 
+        /// <summary>
+        /// Инициализация из файлов.
+        /// </summary>
+        /// <param name="vPath">Абсолютнвй путь к вершинному шейдеру</param>
+        /// <param name="fPath">Абсолютнвй путь к фрагментному шейдеру</param>
         public static Shader FromFiles(string vPath, string fPath)
         {
             return new Shader(File.ReadAllText(vPath), File.ReadAllText(fPath));
         }
 
+        /// <summary>
+        /// Инициализация из исходных значений
+        /// </summary>
+        /// <param name="vSource">Исходная строка вершинного шейдера</param>
+        /// <param name="fSource">Исходная строка фрагментного шейдера</param>
+        /// <returns></returns>
         public static Shader FromSource(string vSource, string fSource)
         {
             return new Shader(vSource, fSource);
@@ -96,6 +109,9 @@ namespace XEngine.Core.Graphics.OpenGL
             }
         }
 
+        /// <summary>
+        /// Использование шейдерной программы (см. OpenGL UseProgram)
+        /// </summary>
         public void Use()
         {
             if (_currentBoundHandle != Handle)
@@ -105,6 +121,11 @@ namespace XEngine.Core.Graphics.OpenGL
             }
         }
 
+        /// <summary>
+        /// Получение индекса uniform (см. OpenGL GetUniformLocation)
+        /// </summary>
+        /// <param name="name">идентификатор uniform</param>
+        /// <returns>индекс uniform</returns>
         public int GetUniformLocation(string name)
         {
             if (_uniformLocations.TryGetValue(name, out int location))
@@ -117,36 +138,66 @@ namespace XEngine.Core.Graphics.OpenGL
 
         // --- Uniform (GPU consts) Setters ---
 
+        /// <summary>
+        /// Установка uniform значений (см. OpenGL Uniform)
+        /// </summary>
+        /// <param name="name">назвние uniform</param>
+        /// <param name="value">значение</param>
         public void SetInt(string name, int value)
         {
             int loc = GetUniformLocation(name);
             if (loc != -1) GL.Uniform1(loc, value);
         }
 
+        /// <summary>
+        /// Установка uniform значений (см. OpenGL Uniform)
+        /// </summary>
+        /// <param name="name">назвние uniform</param>
+        /// <param name="value">значение</param>
         public void SetFloat(string name, float value)
         {
             int loc = GetUniformLocation(name);
             if (loc != -1) GL.Uniform1(loc, value);
         }
 
+        /// <summary>
+        /// Установка uniform значений (см. OpenGL Uniform)
+        /// </summary>
+        /// <param name="name">назвние uniform</param>
+        /// <param name="value">значение</param>
         public void SetVector2(string name, Vector2 value)
         {
             int loc = GetUniformLocation(name);
             if (loc != -1) GL.Uniform2(loc, value.X, value.Y);
         }
 
+        /// <summary>
+        /// Установка uniform значений (см. OpenGL Uniform)
+        /// </summary>
+        /// <param name="name">назвние uniform</param>
+        /// <param name="value">значение</param>
         public void SetVector3(string name, Vector3 value)
         {
             int loc = GetUniformLocation(name);
             if (loc != -1) GL.Uniform3(loc, value);
         }
 
+        /// <summary>
+        /// Установка uniform значений (см. OpenGL Uniform)
+        /// </summary>
+        /// <param name="name">назвние uniform</param>
+        /// <param name="value">значение</param>
         public void SetVector4(string name, Vector4 value)
         {
             int loc = GetUniformLocation(name);
             if (loc != -1) GL.Uniform4(loc, value);
         }
 
+        /// <summary>
+        /// Установка uniform значений (см. OpenGL Uniform)
+        /// </summary>
+        /// <param name="name">назвние uniform</param>
+        /// <param name="value">значение</param>
         public void SetMatrix4(string name, Matrix4 value)
         {
             int loc = GetUniformLocation(name);
@@ -154,6 +205,9 @@ namespace XEngine.Core.Graphics.OpenGL
         }
 
         // --- Cleanup --
+        /// <summary>
+        /// Удаление шейдерной программы
+        /// </summary>
         public void Dispose()
         {
             Dispose_();

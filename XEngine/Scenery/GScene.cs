@@ -41,6 +41,10 @@ namespace XEngine.Core.Scenery
             World = _wld.AddComponent<GBox2DWorld>().Init(pixelPerMetre: 16, gravity: new B2Vec2(0, -18));
         }
 
+        /// <summary>
+        /// Создание новой сущности
+        /// </summary>
+        /// <returns>Экземпляр сужности</returns>
         public Entity SpawnEntity()
         {
             int id = _id++;
@@ -49,24 +53,40 @@ namespace XEngine.Core.Scenery
             return _e;
         }
 
+        /// <summary>
+        /// Записывает действие в очередь для исполнения вне основного цикла (для избежания оштбок изменения коллекции во время итерации)
+        /// </summary>
         public void Schedule(Action action)
         {
             schedules.Add(action);
         }
 
+        /// <summary>
+        /// Очистка сцены от сущностей
+        /// </summary>
         protected void ClearScene()
         {
             foreach (var e in _entities.Values) e.MarkDelete();
         }
 
+        /// <summary>
+        /// Вызов завершения сцены
+        /// </summary>
         public void End() => OnEnd?.Invoke();
 
         #region System
+        /// <summary>
+        /// Добавление системы к сцене
+        /// </summary>
         public void AddSystem(IGameSystem system)
         {
             _systems.Add(system);
             _systems.Sort((a, b) => a.Priority.CompareTo(b.Priority));
         }
+
+        /// <summary>
+        /// Удалени системы из сцены (по экземрляру)
+        /// </summary>
         public void RemoveSystem(IGameSystem system)
         {
             _systems.Remove(system);
@@ -74,7 +94,14 @@ namespace XEngine.Core.Scenery
         #endregion
 
         #region Context
+        /// <summary>
+        /// загрузка с сцены
+        /// </summary>
         public virtual void Load() { }
+
+        /// <summary>
+        /// выгрузка с сцены
+        /// </summary>
         public virtual void Unload()
         {
             World.Dispose();
@@ -82,10 +109,17 @@ namespace XEngine.Core.Scenery
         #endregion
 
         #region Timer
+        /// <summary>
+        /// Регистрация таймера для обновления
+        /// </summary>
         public void RegisterTimer(GameTimer timer)
         {
             if (!_timers.Contains(timer)) _timers.Add(timer);
         }
+        /// <summary>
+        /// Исключение таймера из обновления
+        /// </summary>
+        /// <param name="timer"></param>
         public void UnregisterTimer(GameTimer timer)
         {
             _timers.Remove(timer);
@@ -93,6 +127,13 @@ namespace XEngine.Core.Scenery
         #endregion
 
         #region Update
+        /// <summary>
+        /// Обновелие таймеров.
+        /// Вызов систем.
+        /// Вызов запланированных действий.
+        /// удаление сущностей, помеченных на удаление.
+        /// </summary>
+        /// <param name="_dt"></param>
         public void Update(float _dt)
         {
             if (IsDeleted) return;
@@ -132,15 +173,36 @@ namespace XEngine.Core.Scenery
         #endregion
 
         #region Query
+        /// <summary>
+        /// Получение сущности по индексу (null если нидекс пустой)
+        /// </summary>
         public Entity? GetById(int id) => _entities.TryGetValue(id, out var entity) ? entity : null;
+
+        /// <summary>
+        /// получение итератора сущностей по индексам
+        /// </summary>
+        /// <param name="ids"></param>
+        /// <returns></returns>
         public IEnumerable<Entity> IterateByIds(IEnumerable<int> ids)
         {
-            foreach (var id in ids) yield return _entities[id];
+            foreach (var id in ids) if (_entities.TryGetValue(id, out var entity)) yield return entity;
         }
+        
+        /// <summary>
+        /// Получение сущностей.
+        /// </summary>
+        /// <param name="_predicate">Предикат сущности (true - включена, false - исключена)</param>
         public IEnumerable<Entity> Query(Predicate<Entity> _predicate)
         {
             foreach (var _e in _entities.Values) if (_predicate(_e)) yield return _e;
         }
+
+        /// <summary>
+        /// Получение сущностей с компонентом T1
+        /// </summary>
+        /// <typeparam name="T1">Компонент сущности</typeparam>
+        /// <param name="_predicate">Предикат сущности (true - включена, false - исключена)</param>
+        /// <returns>Кортеж вида (Entity, T1)</returns>
         public IEnumerable<(Entity, T1)> Query<T1>(Func<Entity, T1, bool>? _predicate = null)
             where T1 : GameComponent
         {
@@ -153,6 +215,14 @@ namespace XEngine.Core.Scenery
                 }
             }
         }
+
+        /// <summary>
+        /// Получение сущностей с компонентами T1 и T2
+        /// </summary>
+        /// <typeparam name="T1">Компонент сущности</typeparam>
+        /// <typeparam name="T2">Компонент сущности</typeparam>
+        /// <param name="_predicate">Предикат сущности (true - включена, false - исключена)</param>
+        /// <returns>Кортеж вида (Entity, T1, T2)</returns>
         public IEnumerable<(Entity, T1, T2)> Query<T1, T2>(Func<Entity, T1, T2, bool>? _predicate = null)
             where T1 : GameComponent
             where T2 : GameComponent
@@ -166,6 +236,15 @@ namespace XEngine.Core.Scenery
                 }
             }
         }
+
+        /// <summary>
+        /// Получение сущностей с компонентами T1, T2 и T3
+        /// </summary>
+        /// <typeparam name="T1">Компонент сущности</typeparam>
+        /// <typeparam name="T2">Компонент сущности</typeparam>
+        /// <typeparam name="T3">Компонент сущности</typeparam>
+        /// <param name="_predicate">Предикат сущности (true - включена, false - исключена)</param>
+        /// <returns>Кортеж вида (Entity, T1, T2, T3)</returns>
         public IEnumerable<(Entity, T1, T2, T3)> Query<T1, T2, T3>(Func<Entity, T1, T2, T3, bool>? _predicate = null)
             where T1 : GameComponent
             where T2 : GameComponent

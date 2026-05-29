@@ -4,7 +4,8 @@ using OtkKeys = OpenTK.Windowing.GraphicsLibraryFramework.Keys;
 namespace WinFormsUI.Game.Input
 {
     /// <summary>
-    /// Only supports A-Z, Arrow Keys, Shift, Insert, Ctrl
+    /// Переводчик клавишь 'System.Windows.Forms.Keys' в клавиши 'OpenTK.Windowing.GraphicsLibraryFramework.Keys'
+    /// Поддерживает A-Z, Стрелки, Shift, Insert, Ctrl
     /// </summary>
     public static class KeyConverter
     {
@@ -47,6 +48,11 @@ namespace WinFormsUI.Game.Input
             { WinKeys.Control, OtkKeys.LeftControl },
         };
 
+        /// <summary>
+        /// Перевод
+        /// </summary>
+        /// <param name="winKey">клавиша 'System.Windows.Forms.Keys'</param>
+        /// <returns>клавиша 'OpenTK.Windowing.GraphicsLibraryFramework.Keys'</returns>
         public static OtkKeys ToOpenTK(WinKeys winKey)
         {
             return Map.TryGetValue(winKey, out var otkKey) ? otkKey : OtkKeys.Unknown;

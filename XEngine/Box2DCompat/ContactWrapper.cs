@@ -1,15 +1,12 @@
 ﻿using Box2D.NET;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using XEngine.Core.Base;
 using XEngine.Core.Box2DCompat.Components;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.Tab;
 
 namespace XEngine.Core.Box2DCompat
 {
+    /// <summary>
+    /// Обертка над контактом Box2D. Предоставляет удобный доступ к идентификаторам фигур, тел и связанных сущностей движка.
+    /// </summary>
     public readonly struct ContactWrapper
     {
         private readonly B2ShapeId _shapeIdA;
@@ -27,6 +24,10 @@ namespace XEngine.Core.Box2DCompat
         public Entity? EntityA => B2Bodies.b2Body_GetUserData(BodyIdA).GetRef<UserData>()?.HostBody.Owner;
         public Entity? EntityB => B2Bodies.b2Body_GetUserData(BodyIdB).GetRef<UserData>()?.HostBody.Owner;
 
+        /// <summary>
+        /// Инициализирует обертку на основе события начала физического контакта.
+        /// </summary>
+        /// <param name="ev">Событие начала контакта.</param>
         public ContactWrapper(B2ContactBeginTouchEvent ev)
         {
             _shapeIdA = ev.shapeIdA;
@@ -35,6 +36,10 @@ namespace XEngine.Core.Box2DCompat
             IsSensor = false;
         }
 
+        /// <summary>
+        /// Инициализирует обертку на основе события окончания физического контакта.
+        /// </summary>
+        /// <param name="ev">Событие окончания контакта.</param>
         public ContactWrapper(B2ContactEndTouchEvent ev)
         {
             _shapeIdA = ev.shapeIdA;
@@ -43,14 +48,10 @@ namespace XEngine.Core.Box2DCompat
             IsSensor = false;
         }
 
-        public ContactWrapper(B2ContactHitEvent ev)
-        {
-            _shapeIdA = ev.shapeIdA;
-            _shapeIdB = ev.shapeIdB;
-            _contactId = ev.contactId;
-            IsSensor = false;
-        }
-
+        /// <summary>
+        /// Инициализирует обертку на основе события входа в сенсорную область.
+        /// </summary>
+        /// <param name="ev">Событие входа в сенсор.</param>
         public ContactWrapper(B2SensorBeginTouchEvent ev)
         {
             _shapeIdA = ev.sensorShapeId;
@@ -58,6 +59,10 @@ namespace XEngine.Core.Box2DCompat
             IsSensor = true;
         }
 
+        /// <summary>
+        /// Инициализирует обертку на основе события выхода из сенсорной области.
+        /// </summary>
+        /// <param name="ev">Событие выхода из сенсора.</param>
         public ContactWrapper(B2SensorEndTouchEvent ev)
         {
             _shapeIdA = ev.sensorShapeId;

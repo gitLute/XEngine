@@ -4,6 +4,9 @@ using StbImageSharp;
 
 namespace XEngine.Core.Graphics.OpenGL
 {
+    /// <summary>
+    /// Обертка для дескриптора текстуры OpenGL
+    /// </summary>
     public class Texture2D
     {
         public int Handle { get; private set; }
@@ -14,6 +17,10 @@ namespace XEngine.Core.Graphics.OpenGL
 
         public bool IsValid => !_disposed;
 
+        /// <summary>
+        /// Загрузка текстуры из файла
+        /// </summary>
+        /// <param name="path">Абсолютный путь</param>
         public static Texture2D FromPath(string path)
         {
             using FileStream stream = File.OpenRead(path);
@@ -38,6 +45,13 @@ namespace XEngine.Core.Graphics.OpenGL
             return new Texture2D { Handle = texHandle, Width = image.Width, Height = image.Height };
         }
 
+        /// <summary>
+        /// Создание текстуры гапрямую из байтов
+        /// </summary>
+        /// <param name="width">Ширина</param>
+        /// <param name="height">Высота</param>
+        /// <param name="data">Массив Байтов [ RGBA x width x height ]</param>
+        /// <returns></returns>
         public static Texture2D FromBytes(int width, int height, byte[] data)
         {
             int texHandle = GL.GenTexture();
@@ -57,13 +71,20 @@ namespace XEngine.Core.Graphics.OpenGL
             return new Texture2D { Handle = texHandle, Width = width, Height = height };
         }
 
+        /// <summary>
+        /// Привязка текстуры (см. OpenGl BindTexture)
+        /// </summary>
         public void Use() => GL.BindTexture(TextureTarget.Texture2D, Handle);
 
+        /// <summary>
+        /// Удаления дескриптора
+        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;
-            GL.DeleteTexture(Handle);
             _disposed = true;
+            
+            GL.DeleteTexture(Handle);
         }
     }
 }

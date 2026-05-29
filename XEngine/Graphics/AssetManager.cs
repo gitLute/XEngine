@@ -4,6 +4,9 @@ using XEngine.Core.Scenery;
 
 namespace XEngine.Core.Graphics
 {
+    /// <summary>
+    /// Менеджер рессурсов (графики)
+    /// </summary>
     public sealed class AssetManager : IAssetLoader, IDisposable
     {
         private readonly Dictionary<string, Texture2D> _persistentTextures = [];
@@ -11,6 +14,9 @@ namespace XEngine.Core.Graphics
         private readonly string _assetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets");
         private bool _disposed = false;
 
+        /// <summary>
+        /// Инициализация после загрузки OpenGL
+        /// </summary>
         public void Init()
         {
             InitDefaultTexture();
@@ -41,12 +47,18 @@ namespace XEngine.Core.Graphics
             return newTex;
         }
 
+        /// <summary>
+        /// вызрущка ресурсов сцены
+        /// </summary>
         public void UnloadSceneAssets()
         {
             foreach (var tex in _sceneTextures.Values) tex.Dispose();
             _sceneTextures.Clear();
         }
 
+        // <summary>
+        /// вызрущка ресурсов сцены и невыгружаемых ресурсов
+        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;

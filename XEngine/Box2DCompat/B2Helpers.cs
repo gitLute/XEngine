@@ -6,8 +6,16 @@ using XEngine.Core.Base;
 
 namespace XEngine.Core.Box2DCompat
 {
+    /// <summary>
+    /// Вспомогательные методы для работы с физическим движком Box2D.
+    /// </summary>
     public static class B2Helpers
     {
+        /// <summary>
+        /// Создает капсулу, вписанную в заданный ограничивающий прямоугольник (AABB).
+        /// </summary>
+        /// <param name="aabb">Ограничивающий прямоугольник.</param>
+        /// <returns>Структура капсулы Box2D.</returns>
         public static B2Capsule MakeCapsule(B2AABB aabb)
         {
             var w = aabb.upperBound.X - aabb.lowerBound.X;
@@ -40,11 +48,20 @@ namespace XEngine.Core.Box2DCompat
             };
         }
 
-        public static bool CheckFlag(B2ShapeId id, ulong flag)
-        {
-            return (B2Shapes.b2Shape_GetFilter(id).categoryBits & flag) == flag;
-        }
-    
+        /// <summary>
+        /// Проверяет, установлен ли определенный бит категории фильтрации для фигуры.
+        /// </summary>
+        /// <param name="id">Идентификатор фигуры.</param>
+        /// <param name="flag">Проверяемый флаг категории.</param>
+        /// <returns>True, если флаг установлен.</returns>
+        public static bool CheckFlag(B2ShapeId id, ulong flag) => (B2Shapes.b2Shape_GetFilter(id).categoryBits & flag) == flag;
+
+        /// <summary>
+        /// Пытается получить игровую сущность (Entity), связанную с фигурой через пользовательские данные тела.
+        /// </summary>
+        /// <param name="id">Идентификатор фигуры.</param>
+        /// <param name="entity">Выходной параметр: найденная сущность или значение по умолчанию.</param>
+        /// <returns>True, если сущность найдена.</returns>
         public static bool TryFetchEntity(B2ShapeId id, out Entity entity)
         {
             var e = b2Body_GetUserData(b2Shape_GetBody(id)).GetRef<UserData>()?.HostBody.Owner;

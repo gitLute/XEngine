@@ -15,10 +15,16 @@ using XEngine.Core.Scenery;
 
 namespace WinFormsUI.Game.Scenes
 {
+    /// <summary>
+    /// Основная игровая сцена. Управляет логикой матча, спавном игроков и настройкой систем обновления.
+    /// </summary>
     internal class MainScene(GameEngine _engine, string AId, string BId, string ArenaPath) : GScene(_engine)
     {
         public string WinnerName = "";
 
+        /// <summary>
+        /// Настраивает и регистрирует все необходимые системы для игровой логики.
+        /// </summary>
         private void SetupSystems()
         {
             AddSystem(new Box2DContactSystem()); // 50
@@ -37,6 +43,10 @@ namespace WinFormsUI.Game.Scenes
             AddSystem(new WinSystem()); // 700
         }
 
+        /// <summary>
+        /// Создает фоновые слои сцены из набора текстур.
+        /// </summary>
+        /// <param name="folder">Путь к папке с текстурами фона.</param>
         private void CreateBG(string folder)
         {
             Texture2D tex;
@@ -58,6 +68,9 @@ namespace WinFormsUI.Game.Scenes
             }
         }
 
+        /// <summary>
+        /// Выполняет начальную загрузку сцены: создает системы, фон, камеру и объекты уровня из конфигурации.
+        /// </summary>
         public override void Load()
         {
             AddSystem(new PlayerSpawnSystem(AId, BId));
@@ -69,6 +82,9 @@ namespace WinFormsUI.Game.Scenes
             foreach (var bloc in LevelLoader.Load(ArenaPath)) bloc.Spawn(this);
         }
 
+        /// <summary>
+        /// Очищает сцену и освобождает ресурсы при выгрузке.
+        /// </summary>
         public override void Unload()
         {
             ClearScene();

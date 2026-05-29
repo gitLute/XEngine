@@ -6,7 +6,10 @@ using XEngine.Core.Utils;
 
 namespace XEngine.Core.Common.Transform
 {
-    public sealed class GTransform : GameComponent, IDirtiable
+    /// <summary>
+    /// Компонент трансформации игрового объекта. Управляет позицией, вращением и иерархией родитель-потомок.
+    /// </summary>
+    public sealed class GTransform : GameComponent
     {
         private Vector3 _position = Vector3.Zero;
         private float _rotation = 0;
@@ -20,7 +23,17 @@ namespace XEngine.Core.Common.Transform
 
         public bool IsSynced { get; private set; } = true;
 
+        /// <summary>
+        /// Инициализирует трансформацию заданными значениями позиции и вращения.
+        /// </summary>
+        /// <param name="values">Объект с начальными параметрами.</param>
         public GTransform Init(TransformValues values) => Init(values.Position, values.Rotation);
+
+        /// <summary>
+        /// Инициализирует трансформацию заданными координатами и углом поворота.
+        /// </summary>
+        /// <param name="pos">Начальная позиция.</param>
+        /// <param name="rotation">Начальный угол поворота (в радианах).</param>
         public GTransform Init(Vector3 pos, float rotation)
         {
             _position = pos;
@@ -29,6 +42,11 @@ namespace XEngine.Core.Common.Transform
             return this;
         }
 
+        /// <summary>
+        /// Устанавливает родителя для текущего объекта, обновляя связи в иерархии.
+        /// Нельзя задать родителя объекту с компонентом Box2DBody.
+        /// </summary>
+        /// <param name="newParent">Новый родительский объект или null для удаления из иерархии.</param>
         public void SetParent(GTransform? newParent)
         {
             if (newParent != null &&  Owner.Get<GBox2DBody>() is not null)
@@ -52,6 +70,11 @@ namespace XEngine.Core.Common.Transform
             }
         }
 
+        /// <summary>
+        /// Возвращает дочерний элемент по индексу в списке потомков.
+        /// </summary>
+        /// <param name="index">Индекс дочернего элемента.</param>
+        /// <returns>Дочерний объект трансформации.</returns>
         public GTransform? GetChild(int index)
         {
             GTransform? current = FirstChild;
@@ -65,6 +88,9 @@ namespace XEngine.Core.Common.Transform
             throw new IndexOutOfRangeException();
         }
 
+        /// <summary>
+        /// Помечает текущий объект и всех его потомков как требующие пересчета матрицы мира.
+        /// </summary>
         public void SetDirty()
         {
             if (_isDirty) return;
@@ -107,6 +133,16 @@ namespace XEngine.Core.Common.Transform
             }
         }
 
+        /// <summary>
+        /// Плавно приближает позицию объекта к целевой точке с заданной силой интерполяции.
+        /// </summary>
+        /// <param name="newPos">Целевая позиция.</param>
+        /// <param name="strength">Коэффициент интерполяции (0..1).</param>
+        public void Approach(Vector3 newPos, float strength)
+        {
+            Position = Vector3.Lerp(Position, newPos, strength);
+        }
+
         public float Rotation
         {
             get => _rotation;
@@ -121,6 +157,10 @@ namespace XEngine.Core.Common.Transform
             }
         }
 
+        /// <summary>
+        /// Синхронизирует позицию и вращение с физическим телом Box2D.
+        /// </summary>
+        /// <param name="gbody">Компонент физического тела.</param>
         public void SyncToBody(GBox2DBody gbody)
         {
             var pos = B2Bodies.b2Body_GetPosition(gbody.Id);
@@ -131,6 +171,10 @@ namespace XEngine.Core.Common.Transform
             SetDirty();
         }
 
+        /// <summary>
+        /// Вычисляет и возвращает мировую матрицу трансформации с учетом иерархии родителей.
+        /// </summary>
+        /// <returns>Мировая матрица 4x4.</returns>
         public Matrix4 GetWorldMatrix()
         {
             if (_isDirty)

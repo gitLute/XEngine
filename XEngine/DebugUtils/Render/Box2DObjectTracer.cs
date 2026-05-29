@@ -1,21 +1,22 @@
 ﻿using Box2D.NET;
 using OpenTK.Mathematics;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using XEngine.Core.Graphics.OpenGL;
 
 using static Box2D.NET.B2MathFunction;
 
 namespace XEngine.Core.DebugUtils.Render
 {
+    /// <summary>
+    /// Вспомогательный класс для отрисовки объектов физического мира Box2D.
+    /// </summary>
     internal static class Box2DObjectTracer
     {
+        /// <summary>
+        /// Отрисовывает тело (Body) и все его формы через указанный LineBatcher.
+        /// </summary>
+        /// <param name="bodyId">Идентификатор тела в Box2D.</param>
+        /// <param name="lb">Экземпляр LineBatcher для отрисовки.</param>
+        /// <param name="color">Цвет линий.</param>
         public static void TraceBody(B2BodyId bodyId, LineBatcher lb, Vector4 color)
         {
             B2Transform transform = B2Bodies.b2Body_GetTransform(bodyId);

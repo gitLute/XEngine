@@ -27,17 +27,24 @@ namespace WinFormsUI
             InitializeComponent();
             _engine = new GameEngine();
             KeyPreview = true;
+
+            FormClosing += (_, _) => _engine.Dispose();
+            Resize += (_, _) => _engine.Renderer.OnResize(ClientSize.Width, ClientSize.Height);
+
+            KeyDown += (_, e) => _engine.Input.SetKeyDown(KeyConverter.ToOpenTK(e.KeyCode));
+            KeyUp += (_, e) => _engine.Input.SetKeyUp(KeyConverter.ToOpenTK(e.KeyCode));
+            LostFocus += (_, _) => _engine.Input.ClearStates();
+            Deactivate += (_, _) => _engine.Input.ClearStates();
         }
 
         private void MainFormLoad(object sender, EventArgs e)
         {
             _engine.Renderer.AddRenderModule(new TracerRenderModule(_engine.GLProvider));
+
             _engine.Renderer.AddRenderModule(new BasicHealthRenderModule(_engine.GLProvider));
-
             _engine.GLProvider.LoadShader("Rectangle", "Rectangle");
-            _engine.GLProvider.LoadShader("NineSlice", "NineSlice");
 
-            _engine.Renderer.SetViewport(ClientSize.Width, ClientSize.Height);
+            _engine.Renderer.OnResize(ClientSize.Width, ClientSize.Height);
 
             if (TryGetScene(out _scene)) _engine.SceneManager.SwitchTo(_scene);
 
@@ -50,12 +57,10 @@ namespace WinFormsUI
 
         private void Restart()
         {
-
             string message = _scene.WinnerName == ""
                 ? "ÍÈ×Üß! Îáà èãðîêà ïîãèáëè îäíîâðåìåííî!"
-                : $"ÏÎÁÅÄÈË ÈÃÐÎÊ {_scene.WinnerName}!\n\nÏîçäðàâëÿåì ïîáåäèòåëÿ!";
-            DialogResult result = MessageBox.Show(message + "\n\nÍà÷àòü íîâóþ èãðó?", "ÈÃÐÀ ÎÊÎÍ×ÅÍÀ",
-                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                : $"ÏÎÁÅÄÈË ÈÃÐÎÊ {_scene.WinnerName}!";
+            DialogResult result = MessageBox.Show(message + "\n\nÍà÷àòü íîâóþ èãðó?", "ÈÃÐÀ ÎÊÎÍ×ÅÍÀ", MessageBoxButtons.YesNo);
 
             if (result == DialogResult.Yes && TryGetScene(out _scene)) _engine.SceneManager.SwitchTo(_scene);
             if (result == DialogResult.No) Environment.Exit(0);
@@ -64,11 +69,11 @@ namespace WinFormsUI
         private bool TryGetScene(out MainScene scene)
         {
             scene = default!;
-            string[] variants = [.. PlayerFactory.Instance.GetIds()];
+            string[] variants = [.. PlayerUtil.Instance.GetIds()];
             using var form = new MenuForm(variants);
             if (form.ShowDialog() == DialogResult.OK)
             {
-                scene = new(_engine, form.PlayerA, form.PlayerB, "Levels/Arena1.json");
+                scene = new(_engine, form.PlayerA, form.PlayerB, form.LevelPath);
                 scene.OnEnd += Restart;
                 return true;
             }
@@ -109,22 +114,5 @@ namespace WinFormsUI
 
             MainGLControl.Invalidate();
         }
-
-        private void MainFormResize(object sender, EventArgs e)
-        {
-            int width = ClientSize.Width;
-            int height = ClientSize.Height;
-
-            if (width > 0 && height > 0) _engine.Renderer.SetViewport(width, height);
-        }
-
-        private void OnClose(object sender, FormClosingEventArgs e)
-        {
-            _engine.Dispose();
-        }
-
-        private void MainForm_OnKeyDown(object sender, KeyEventArgs e) => _engine.Input.SetKeyDown(KeyConverter.ToOpenTK(e.KeyCode));
-        private void MainForm_OnKeyUp(object sender, KeyEventArgs e) => _engine.Input.SetKeyUp(KeyConverter.ToOpenTK(e.KeyCode));
-        private void OnLostGlobalFacus(object sender, EventArgs e) => _engine.Input.ClearStates();
     }
 }

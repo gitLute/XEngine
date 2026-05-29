@@ -5,11 +5,17 @@ using XEngine.Core.Common;
 
 namespace WinFormsUI.Game.Scenes
 {
+    /// <summary>
+    /// Компонент спавнера оружия. Периодически создает случайное оружие в точке расположения объекта.
+    /// </summary>
     internal class GWeaponSpawner : GameComponent, IDisposable
     {
         public GameTimer SpawnTimer = new(20, true);
         public float ExpirationTime = 10;
 
+        /// <summary>
+        /// Инициализирует таймер спавна и регистрирует его в сцене.
+        /// </summary>
         public GWeaponSpawner Init()
         {
             Owner.Scene.RegisterTimer(SpawnTimer);
@@ -19,13 +25,16 @@ namespace WinFormsUI.Game.Scenes
             return this;
         }
 
+        /// <summary>
+        /// Создает случайное оружие из доступных типов и сбрасывает его как подбираемый предмет.
+        /// </summary>
         private void SpawnRandom()
         {
             Owner.Scene.Schedule(() =>
             {
-                var l = WeaponFactory.Instance.GetIds().ToList();
+                var l = WeaponUtils.Instance.GetIds().ToList();
                 var id = l[Owner.Scene.Random.Next(l.Count)];
-                if (WeaponFactory.Instance.TryCreateWeapon(id, out var w))
+                if (WeaponUtils.Instance.TryCreateWeapon(id, out var w))
                 {
                     w.Init(Owner.Scene);
                     DropBuilder.Init(w)
@@ -37,6 +46,9 @@ namespace WinFormsUI.Game.Scenes
             });
         }
 
+        /// <summary>
+        /// Освобождает ресурсы таймера при уничтожении компонента.
+        /// </summary>
         public void Dispose()
         {
             SpawnTimer.OnComplete -= SpawnRandom;

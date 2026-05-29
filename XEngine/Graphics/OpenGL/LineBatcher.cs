@@ -1,19 +1,17 @@
 ﻿using Box2D.NET;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace XEngine.Core.Graphics.OpenGL
 {
+    /// <summary>
+    /// Rkfcc для отрисовки линий через OpenGL. Поддерживает динамическое добавление точек.
+    /// </summary>
     public sealed class LineBatcher : IDisposable
     {
+        /// <summary>
+        /// Контекст для построения линии внутри LineBatcher.
+        /// </summary>
         public readonly struct LineLoopScope : IDisposable
         {
             private readonly LineBatcher _batcher;
@@ -49,6 +47,11 @@ namespace XEngine.Core.Graphics.OpenGL
         private int VertexCount => _vertices.Count / STRIDE;
         private LineLoopScope? CurrentLoop = null;
 
+        /// <summary>
+        /// Начинает построение линии. Возвращает контекст для добавления точек.
+        /// </summary>
+        /// <param name="color">Цвет линии (опционально).</param>
+        /// <param name="closed">Замыкать ли линию в петлю.</param>
         public LineLoopScope TraceLine(Vector4? color = null, bool closed = true)
         {
             return new LineLoopScope(this, color, closed);
@@ -64,6 +67,9 @@ namespace XEngine.Core.Graphics.OpenGL
             }
         }
 
+        /// <summary>
+        /// Инициализирует OpenGL ресурсы (VAO, VBO, EBO).
+        /// </summary>
         public void Init()
         {
             _vao = GL.GenVertexArray();
@@ -88,6 +94,11 @@ namespace XEngine.Core.Graphics.OpenGL
             UpdateBuffers();
         }
 
+        /// <summary>
+        /// Добавляет точку к текущей линии.
+        /// </summary>
+        /// <param name="pos">Позиция точки.</param>
+        /// <param name="color">Цвет точки (переопределяет цвет линии).</param>
         public void AddPoint(B2Vec2 pos, Vector4? color = null)
         {
             if (CurrentLoop == null) throw new InvalidOperationException("Unable to add point to line without context");
@@ -109,12 +120,18 @@ namespace XEngine.Core.Graphics.OpenGL
             }
         }
 
+        /// <summary>
+        /// Очищает буферы вершин и индексов.
+        /// </summary>
         public void Clear()
         {
             _vertices.Clear();
             _indices.Clear();
         }
 
+        /// <summary>
+        /// Отрисовывает накопленные линии.
+        /// </summary>
         public void Draw()
         {
             if (_indices.Count == 0) return;
@@ -126,6 +143,9 @@ namespace XEngine.Core.Graphics.OpenGL
             GL.BindVertexArray(0);
         }
 
+        /// <summary>
+        /// Освобождает OpenGL ресурсы.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;
@@ -176,6 +196,5 @@ namespace XEngine.Core.Graphics.OpenGL
                 GL.BufferSubData(BufferTarget.ElementArrayBuffer, IntPtr.Zero, eboSizeBytes, _indexCache);
             }
         }
-
     }
 }

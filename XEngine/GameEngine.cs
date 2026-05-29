@@ -1,8 +1,4 @@
-﻿using OpenTK.Windowing.Desktop;
-using System.Diagnostics;
-using System.IO;
-using System.Text.Json;
-using XEngine.Core.Common.Sprite;
+﻿using XEngine.Core.Common.Sprite;
 using XEngine.Core.Common.Sprite.NineSlice;
 using XEngine.Core.Config;
 using XEngine.Core.DebugUtils.Render;
@@ -13,6 +9,9 @@ using XEngine.Core.Scenery;
 
 namespace XEngine.Core
 {
+    /// <summary>
+    /// Движок игры
+    /// </summary>
     public sealed class GameEngine : IDisposable
     {
         private readonly AssetManager _assets;
@@ -43,12 +42,16 @@ namespace XEngine.Core
             _config = new ConfigManager().Load(Path.Combine(AssetPath, "config.json"));
         }
 
+        /// <summary>
+        /// Инициализирует движок полсе загрузки OpenGL 
+        /// </summary>
         public void Init()
         {
             _assets.Init();
 
             _glProvider.Init();
             _glProvider.LoadShader("Line", "Line");
+            _glProvider.LoadShader("NineSlice", "NineSlice");
 
             SpriteRendererModule spriteRenderer = new(_glProvider);
             NineSliceRendererModule nineslicerenderer = new(_glProvider);
@@ -60,17 +63,28 @@ namespace XEngine.Core
             _input.LoadBindingsFromConfig(_config);
         }
 
+        /// <summary>
+        /// обновление движка
+        /// </summary>
+        /// <param name="dt">Время с предыдущего обновления</param>
         public void Update(float dt)
         {
             _sceneManager.Update(dt);
             _input.Update(dt);
         }
 
+        /// <summary>
+        /// лтрисовка кадра
+        /// </summary>
         public void Render()
         {
             if (_sceneManager.CurrentScene != null) _renderPipeline.Render(_sceneManager.CurrentScene);
         }
 
+        /// <summary>
+        /// Очистка Менеджера сцен
+        /// Очистка Ресурсов (графика)
+        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;
@@ -78,6 +92,7 @@ namespace XEngine.Core
 
             _sceneManager.Dispose();
             _assets.Dispose();
+            _glProvider.Dispose();
         }
     }
 }
