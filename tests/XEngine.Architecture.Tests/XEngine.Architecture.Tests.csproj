@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Проверка запретов из 17.5 как тесты: нарушение правила должно останавливать
+    обычный dotnet test, иначе правило не enforce (17.5).
+  -->
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+</Project>
