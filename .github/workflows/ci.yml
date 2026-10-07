@@ -1,0 +1,48 @@
+name: CI
+
+# Ветка Refactor: main содержит удалённый WinForms-слой и не переписывается
+# (5.1b), поэтому проверки выполняются только для Refactor.
+on:
+  push:
+    branches:
+      - Refactor
+  pull_request:
+    branches:
+      - Refactor
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Сборка, проверки и тесты
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@v4
+
+      - name: Установить .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Восстановление пакетов
+        run: dotnet restore XEngine.sln
+
+      # -warnaserror обязателен (17.5): предупреждение анализатора о нарушении
+      # правила должно останавливать сборку, а не попадать в вывод.
+      - name: Сборка с предупреждениями как ошибками
+        run: dotnet build XEngine.sln -warnaserror --no-restore -c Release
+
+      # Нарушения запретов (17.5) ищутся по src/. Отдельный шаг нужен, чтобы
+      # по красному прогону было видно, какое именно правило нарушено.
+      - name: Проверка запретов и архитектуры
+        run: >
+          dotnet test XEngine.sln --no-build -c Release
+          --filter 'FullyQualifiedName~XEngine.Architecture.Tests'
+          --logger 'console;verbosity=normal'
+
+      - name: Тесты
+        run: dotnet test XEngine.sln --no-build -c Release --logger 'console;verbosity=normal'
