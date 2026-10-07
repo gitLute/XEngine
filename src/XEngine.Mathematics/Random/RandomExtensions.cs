@@ -41,8 +41,11 @@ public static class RandomExtensions
     /// </summary>
     /// <param name="random">Источник случайности.</param>
     /// <returns>Единичный вектор.</returns>
+    /// <exception cref="ArgumentNullException">Источник случайности отсутствует.</exception>
     public static Vector2 NextDirection(this IRandomSource random)
     {
+        ArgumentNullException.ThrowIfNull(random);
+
         Angle angle = Angle.FromRadians(random.NextFloat() * Angle.Tau);
         return angle.Direction;
     }
@@ -52,8 +55,11 @@ public static class RandomExtensions
     /// </summary>
     /// <param name="random">Источник случайности.</param>
     /// <returns>Вектор с длиной меньше единицы.</returns>
+    /// <exception cref="ArgumentNullException">Источник случайности отсутствует.</exception>
     public static Vector2 NextInsideUnitCircle(this IRandomSource random)
     {
+        ArgumentNullException.ThrowIfNull(random);
+
         float angle = random.NextFloat() * MathF.Tau;
         float radius = MathF.Sqrt(random.NextFloat());
         return new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
@@ -132,8 +138,12 @@ public static class RandomExtensions
     /// </summary>
     /// <param name="random">Источник случайности.</param>
     /// <returns>Случайный угол.</returns>
+    /// <exception cref="ArgumentNullException">Источник случайности отсутствует.</exception>
     public static Angle NextAngle(this IRandomSource random)
-        => Angle.FromRadians(random.NextFloat() * Angle.Tau);
+    {
+        ArgumentNullException.ThrowIfNull(random);
+        return Angle.FromRadians(random.NextFloat() * Angle.Tau);
+    }
 
     /// <summary>
     /// Возвращает случайную точку внутри AABB.

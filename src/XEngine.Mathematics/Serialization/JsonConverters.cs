@@ -2,6 +2,12 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+// CA1062 отключён для файла: Write переопределяет метод System.Text.Json,
+// который передаёт writer, гарантированно не равный null. Проверка стала бы
+// мёртвым кодом в пути сериализации, а правило проверки аргументов в
+// собственные методы движка продолжает действовать.
+#pragma warning disable CA1062
+
 namespace XEngine.Mathematics.Serialization;
 
 /// <summary>
@@ -144,3 +150,5 @@ public sealed class Rgba32JsonConverter : JsonConverter<Rgba32>
     public override void Write(Utf8JsonWriter writer, Rgba32 value, JsonSerializerOptions options)
         => writer.WriteStringValue(value.ToString());
 }
+
+#pragma warning restore CA1062
