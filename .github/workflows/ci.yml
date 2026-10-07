@@ -46,3 +46,14 @@ jobs:
 
       - name: Тесты
         run: dotnet test XEngine.sln --no-build -c Release --logger 'console;verbosity=normal'
+
+      # Инструмент сборки ассетов проверяется дважды: тестами и запуском на
+      # настоящих исходниках. Второе нужно, чтобы пример из репозитория
+      # собирался тем же путём, что и в разработке.
+      - name: Сборка атласа из исходников
+        run: >
+          dotnet run --project tools/AtlasBuilder -c Release --no-build --
+          --source assets/textures/source --output tmp/atlas-check
+
+      - name: Проверка собранного атласа
+        run: test -f tmp/atlas-check/atlas.png && test -f tmp/atlas-check/atlas.json
