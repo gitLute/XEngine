@@ -362,5 +362,12 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
+# Артефакты сборки .NET
+out/
+
+# Сгенерированная XML-документация
+**/bin/
+**/obj/
+
 tmp/
 img/
