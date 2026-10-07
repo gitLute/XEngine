@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Тесты инструмента сборки атласов. Общие флаги и версии пакетов заданы
+    в tests/Directory.Build.props (17.5).
+  -->
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Ссылка на инструмент, а не на движок: инструмент вне слоёв (5.2) и
+      не должен попадать в зависимости src/.
+    -->
+    <ProjectReference Include="../../tools/AtlasBuilder/AtlasBuilder.csproj" />
+  </ItemGroup>
+
+</Project>

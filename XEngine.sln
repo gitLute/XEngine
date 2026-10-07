@@ -15,6 +15,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AtlasBuilder", "tools\AtlasBuilder\AtlasBuilder.csproj", "{D176AFA1-0060-4DAE-965A-79389DE6EFDA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AtlasBuilder.Tests", "tests\AtlasBuilder.Tests\AtlasBuilder.Tests.csproj", "{5165FD96-9D91-4E94-B82D-022C53AA0466}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,6 +75,18 @@ Global
 		{D176AFA1-0060-4DAE-965A-79389DE6EFDA}.Release|x64.Build.0 = Release|Any CPU
 		{D176AFA1-0060-4DAE-965A-79389DE6EFDA}.Release|x86.ActiveCfg = Release|Any CPU
 		{D176AFA1-0060-4DAE-965A-79389DE6EFDA}.Release|x86.Build.0 = Release|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Debug|x64.Build.0 = Debug|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Debug|x86.Build.0 = Debug|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Release|x64.ActiveCfg = Release|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Release|x64.Build.0 = Release|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Release|x86.ActiveCfg = Release|Any CPU
+		{5165FD96-9D91-4E94-B82D-022C53AA0466}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -80,5 +94,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{0E8567B9-5A1C-41D0-B22F-069861E55497} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{D176AFA1-0060-4DAE-965A-79389DE6EFDA} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{5165FD96-9D91-4E94-B82D-022C53AA0466} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

@@ -46,6 +46,34 @@ public static class AtlasJson
     }
 
     /// <summary>
+    /// Читает описание собранного атласа: так же, как это будет делать движок
+    /// при загрузке (10.6).
+    /// </summary>
+    /// <param name="path">Путь к файлу <c>atlas.json</c>.</param>
+    /// <returns>Описание из файла.</returns>
+    /// <exception cref="ArgumentException">Путь пуст.</exception>
+    /// <exception cref="AtlasBuildException">Файл отсутствует или не разбирается.</exception>
+    public static AtlasJsonDescription ReadBuilt(string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+
+        if (!File.Exists(path))
+        {
+            throw new AtlasBuildException($"Файл описания не найден: {path}");
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize(File.ReadAllText(path), AtlasJsonContext.Default.AtlasJsonDescription)
+                ?? throw new AtlasBuildException($"Файл описания пуст: {path}");
+        }
+        catch (JsonException exception)
+        {
+            throw new AtlasBuildException($"Не удалось разобрать описание {path}: {exception.Message}");
+        }
+    }
+
+    /// <summary>
     /// Строит описание собранного атласа в формате 14.2.
     /// </summary>
     /// <param name="atlas">Собранный атлас.</param>
