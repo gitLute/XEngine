@@ -1,0 +1,25 @@
+<Project>
+
+  <!--
+    Настройки тестовых проектов (все, что лежит в tests/).
+
+    Импортирует общий файл решения и добавляет только то, что тестам не
+    нужно: XML-документация публичного API обязательна для движка (17.1),
+    но не для тестовых классов. Версии пакетов вынесены сюда, чтобы десять
+    будущих тестовых проектов не расходились между собой.
+  -->
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+</Project>
