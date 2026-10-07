@@ -5,14 +5,14 @@ namespace XEngine.Mathematics;
 /// <summary>
 /// Луч: начало и нормализованное направление.
 /// </summary>
-public readonly struct Ray : IEquatable<Ray>
+public readonly struct Ray2 : IEquatable<Ray2>
 {
     /// <summary>
     /// Создаёт луч. Направление нормализуется автоматически.
     /// </summary>
     /// <param name="origin">Начало луча.</param>
     /// <param name="direction">Направление луча. Нулевое направление даёт луч с направлением по X.</param>
-    public Ray(Vector2 origin, Vector2 direction)
+    public Ray2(Vector2 origin, Vector2 direction)
     {
         Origin = origin;
         Direction = direction.SafeNormalize() == Vector2.Zero ? Vector2.UnitX : direction.SafeNormalize();
@@ -47,7 +47,7 @@ public readonly struct Ray : IEquatable<Ray>
     /// </summary>
     /// <param name="bounds">Ограничивающий прямоугольник.</param>
     /// <returns><c>true</c>, если луч пересекает прямоугольник.</returns>
-    public bool Intersects(Aabb bounds)
+    public bool Intersects(Aabb2 bounds)
     {
         float tMin = 0f;
         float tMax = float.MaxValue;
@@ -93,7 +93,7 @@ public readonly struct Ray : IEquatable<Ray>
     /// </summary>
     /// <param name="circle">Круг.</param>
     /// <returns><c>true</c>, если луч пересекает круг.</returns>
-    public bool Intersects(Circle circle)
+    public bool Intersects(Circle2 circle)
     {
         Vector2 toCenter = circle.Center - Origin;
         float projection = Vector2.Dot(toCenter, Direction);
@@ -106,7 +106,7 @@ public readonly struct Ray : IEquatable<Ray>
     /// </summary>
     /// <param name="segment">Отрезок.</param>
     /// <returns><c>true</c>, если луч пересекает отрезок.</returns>
-    public bool Intersects(Segment segment)
+    public bool Intersects(Segment2 segment)
     {
         Vector2 delta = segment.Delta;
         float denominator = Vector2.Cross(Direction, delta);
@@ -122,10 +122,10 @@ public readonly struct Ray : IEquatable<Ray>
     }
 
     /// <inheritdoc/>
-    public bool Equals(Ray other) => Origin.Equals(other.Origin) && Direction.Equals(other.Direction);
+    public bool Equals(Ray2 other) => Origin.Equals(other.Origin) && Direction.Equals(other.Direction);
 
     /// <inheritdoc/>
-    public override bool Equals(object? obj) => obj is Ray other && Equals(other);
+    public override bool Equals(object? obj) => obj is Ray2 other && Equals(other);
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Origin, Direction);
@@ -136,7 +136,7 @@ public readonly struct Ray : IEquatable<Ray>
     /// <param name="left">Первый луч.</param>
     /// <param name="right">Второй луч.</param>
     /// <returns><c>true</c>, если лучи равны.</returns>
-    public static bool operator ==(Ray left, Ray right) => left.Equals(right);
+    public static bool operator ==(Ray2 left, Ray2 right) => left.Equals(right);
 
     /// <summary>
     /// Сравнивает лучи на неравенство.
@@ -144,8 +144,8 @@ public readonly struct Ray : IEquatable<Ray>
     /// <param name="left">Первый луч.</param>
     /// <param name="right">Второй луч.</param>
     /// <returns><c>true</c>, если лучи различаются.</returns>
-    public static bool operator !=(Ray left, Ray right) => !left.Equals(right);
+    public static bool operator !=(Ray2 left, Ray2 right) => !left.Equals(right);
 
     /// <inheritdoc/>
-    public override string ToString() => $"Ray({Origin}, {Direction})";
+    public override string ToString() => $"Ray2({Origin}, {Direction})";
 }

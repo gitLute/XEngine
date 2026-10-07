@@ -135,9 +135,9 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Aabb_FromPoints_CoversAllPoints()
+    public void Aabb2_FromPoints_CoversAllPoints()
     {
-        Aabb bounds = Aabb.FromPoints(
+        Aabb2 bounds = Aabb2.FromPoints(
         [
             new Vector2(-1f, 5f),
             new Vector2(4f, -2f),
@@ -151,15 +151,15 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Aabb_FromPoints_RejectsEmptyInput()
+    public void Aabb2_FromPoints_RejectsEmptyInput()
     {
-        Assert.Throws<ArgumentException>(() => Aabb.FromPoints(ReadOnlySpan<Vector2>.Empty));
+        Assert.Throws<ArgumentException>(() => Aabb2.FromPoints(ReadOnlySpan<Vector2>.Empty));
     }
 
     [Fact]
-    public void Aabb_ClosestPoint_ClampsToBounds()
+    public void Aabb2_ClosestPoint_ClampsToBounds()
     {
-        Aabb bounds = new(new Vector2(0f, 0f), new Vector2(10f, 10f));
+        Aabb2 bounds = new(new Vector2(0f, 0f), new Vector2(10f, 10f));
 
         Assert.Equal(new Vector2(3f, 7f), bounds.ClosestPoint(new Vector2(3f, 7f)));
         Assert.Equal(new Vector2(0f, 0f), bounds.ClosestPoint(new Vector2(-5f, -5f)));
@@ -167,20 +167,20 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Aabb_DistanceTo_IsZeroInside()
+    public void Aabb2_DistanceTo_IsZeroInside()
     {
-        Aabb bounds = new(new Vector2(0f, 0f), new Vector2(10f, 10f));
+        Aabb2 bounds = new(new Vector2(0f, 0f), new Vector2(10f, 10f));
 
         Assert.Equal(0f, bounds.DistanceTo(new Vector2(5f, 5f)), 1e-5f);
         Assert.Equal(3f, bounds.DistanceTo(new Vector2(-3f, 5f)), 1e-5f);
     }
 
     [Fact]
-    public void Aabb_IntersectsAndContains()
+    public void Aabb2_IntersectsAndContains()
     {
-        Aabb outer = new(new Vector2(0f, 0f), new Vector2(10f, 10f));
-        Aabb inner = new(new Vector2(1f, 1f), new Vector2(2f, 2f));
-        Aabb outside = new(new Vector2(20f, 20f), new Vector2(30f, 30f));
+        Aabb2 outer = new(new Vector2(0f, 0f), new Vector2(10f, 10f));
+        Aabb2 inner = new(new Vector2(1f, 1f), new Vector2(2f, 2f));
+        Aabb2 outside = new(new Vector2(20f, 20f), new Vector2(30f, 30f));
 
         Assert.True(outer.Intersects(inner));
         Assert.True(outer.Contains(inner));
@@ -188,18 +188,18 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Aabb_Empty_ContainsNothing()
+    public void Aabb2_Empty_ContainsNothing()
     {
-        Assert.True(Aabb.Empty.IsEmpty);
-        Assert.False(Aabb.Empty.Contains(Vector2.Zero));
+        Assert.True(Aabb2.Empty.IsEmpty);
+        Assert.False(Aabb2.Empty.Contains(Vector2.Zero));
     }
 
     [Fact]
-    public void Aabb_FromRect_MatchesRect()
+    public void Aabb2_FromRect_MatchesRect()
     {
         Rect rect = new(-2f, 3f, 6f, 4f);
 
-        Aabb bounds = Aabb.FromRect(rect);
+        Aabb2 bounds = Aabb2.FromRect(rect);
 
         Assert.Equal(rect.Left, bounds.Min.X, 1e-5f);
         Assert.Equal(rect.Right, bounds.Max.X, 1e-5f);
@@ -208,9 +208,9 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Circle_ContainsPoint()
+    public void Circle2_ContainsPoint()
     {
-        Circle circle = new(Vector2.Zero, 2f);
+        Circle2 circle = new(Vector2.Zero, 2f);
 
         Assert.True(circle.Contains(new Vector2(1f, 1f)));
         Assert.True(circle.Contains(new Vector2(2f, 0f)));
@@ -218,26 +218,26 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Circle_RejectsNegativeRadius()
+    public void Circle2_RejectsNegativeRadius()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new Circle(Vector2.Zero, -1f));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Circle2(Vector2.Zero, -1f));
     }
 
     [Fact]
-    public void Circle_Intersects_TouchingCountsAsIntersection()
+    public void Circle2_Intersects_TouchingCountsAsIntersection()
     {
-        Circle first = new(Vector2.Zero, 1f);
-        Circle second = new(new Vector2(2f, 0f), 1f);
-        Circle third = new(new Vector2(2.01f, 0f), 1f);
+        Circle2 first = new(Vector2.Zero, 1f);
+        Circle2 second = new(new Vector2(2f, 0f), 1f);
+        Circle2 third = new(new Vector2(2.01f, 0f), 1f);
 
         Assert.True(first.Intersects(second));
         Assert.False(first.Intersects(third));
     }
 
     [Fact]
-    public void Circle_ClosestPointOnBoundary()
+    public void Circle2_ClosestPointOnBoundary()
     {
-        Circle circle = new(Vector2.Zero, 3f);
+        Circle2 circle = new(Vector2.Zero, 3f);
 
         Vector2 result = circle.ClosestPointOnBoundary(new Vector2(10f, 0f));
 
@@ -246,9 +246,9 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Segment_ClosestPointTo_ClampsToEndpoints()
+    public void Segment2_ClosestPointTo_ClampsToEndpoints()
     {
-        Segment segment = new(new Vector2(0f, 0f), new Vector2(10f, 0f));
+        Segment2 segment = new(new Vector2(0f, 0f), new Vector2(10f, 0f));
 
         Assert.Equal(new Vector2(0f, 0f), segment.ClosestPointTo(new Vector2(-5f, 3f)));
         Assert.Equal(new Vector2(10f, 0f), segment.ClosestPointTo(new Vector2(15f, 3f)));
@@ -256,9 +256,9 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Segment_HandlesDegenerateCase()
+    public void Segment2_HandlesDegenerateCase()
     {
-        Segment segment = new(new Vector2(1f, 1f), new Vector2(1f, 1f));
+        Segment2 segment = new(new Vector2(1f, 1f), new Vector2(1f, 1f));
 
         Assert.Equal(Vector2.Zero, segment.Direction);
         Assert.Equal(5f, segment.DistanceTo(new Vector2(4f, 5f)), 1e-4f);
@@ -266,9 +266,9 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Capsule_ContainsPoint()
+    public void Capsule2_ContainsPoint()
     {
-        Capsule capsule = new(new Segment(new Vector2(-2f, 0f), new Vector2(2f, 0f)), 1f);
+        Capsule2 capsule = new(new Segment2(new Vector2(-2f, 0f), new Vector2(2f, 0f)), 1f);
 
         Assert.True(capsule.Contains(new Vector2(0f, 0f)));
         Assert.True(capsule.Contains(new Vector2(2.5f, 0f)));
@@ -277,24 +277,24 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Capsule_FromBounds_UsesSmallerSideAsRadius()
+    public void Capsule2_FromBounds_UsesSmallerSideAsRadius()
     {
-        Aabb bounds = Aabb.FromCenterAndSize(Vector2.Zero, new Vector2(10f, 4f));
+        Aabb2 bounds = Aabb2.FromCenterAndSize(Vector2.Zero, new Vector2(10f, 4f));
 
-        Capsule capsule = Capsule.FromBounds(bounds);
+        Capsule2 capsule = Capsule2.FromBounds(bounds);
 
         Assert.Equal(2f, capsule.Radius, 1e-5f);
         Assert.Equal(-3f, capsule.A.X, 1e-4f);
         Assert.Equal(3f, capsule.B.X, 1e-4f);
-        Assert.Equal(6f, capsule.Segment.Length, 1e-4f);
+        Assert.Equal(6f, capsule.Segment2.Length, 1e-4f);
     }
 
     [Fact]
-    public void Capsule_Bounds_AreExpandedByRadius()
+    public void Capsule2_Bounds_AreExpandedByRadius()
     {
-        Capsule capsule = new(new Segment(Vector2.Zero, new Vector2(4f, 0f)), 1f);
+        Capsule2 capsule = new(new Segment2(Vector2.Zero, new Vector2(4f, 0f)), 1f);
 
-        Aabb bounds = capsule.Bounds;
+        Aabb2 bounds = capsule.Bounds;
 
         Assert.Equal(-1f, bounds.Min.X, 1e-5f);
         Assert.Equal(-1f, bounds.Min.Y, 1e-5f);
@@ -303,49 +303,49 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Ray_NormalizesDirection()
+    public void Ray2_NormalizesDirection()
     {
-        Ray ray = new(Vector2.Zero, new Vector2(10f, 0f));
+        Ray2 ray = new(Vector2.Zero, new Vector2(10f, 0f));
 
         Assert.Equal(1f, ray.Direction.Length(), 1e-5f);
         Assert.Equal(new Vector2(1f, 0f), ray.Direction);
     }
 
     [Fact]
-    public void Ray_GetPoint_MovesAlongDirection()
+    public void Ray2_GetPoint_MovesAlongDirection()
     {
-        Ray ray = new(new Vector2(1f, 1f), Vector2.UnitX);
+        Ray2 ray = new(new Vector2(1f, 1f), Vector2.UnitX);
 
         Assert.Equal(new Vector2(5f, 1f), ray.GetPoint(4f));
         Assert.Equal(new Vector2(-1f, 1f), ray.GetPoint(-2f));
     }
 
     [Fact]
-    public void Ray_IntersectsAabb()
+    public void Ray2_IntersectsAabb2()
     {
-        Ray ray = new(new Vector2(-5f, 0f), Vector2.UnitX);
-        Aabb bounds = new(new Vector2(-1f, -1f), new Vector2(1f, 1f));
+        Ray2 ray = new(new Vector2(-5f, 0f), Vector2.UnitX);
+        Aabb2 bounds = new(new Vector2(-1f, -1f), new Vector2(1f, 1f));
 
         Assert.True(ray.Intersects(bounds));
-        Assert.False(ray.Intersects(new Aabb(new Vector2(10f, 10f), new Vector2(11f, 11f))));
+        Assert.False(ray.Intersects(new Aabb2(new Vector2(10f, 10f), new Vector2(11f, 11f))));
     }
 
     [Fact]
-    public void Ray_IntersectsCircle()
+    public void Ray2_IntersectsCircle2()
     {
-        Ray ray = new(new Vector2(-5f, 0f), Vector2.UnitX);
+        Ray2 ray = new(new Vector2(-5f, 0f), Vector2.UnitX);
 
-        Assert.True(ray.Intersects(new Circle(Vector2.Zero, 1f)));
-        Assert.False(ray.Intersects(new Circle(new Vector2(0f, 5f), 1f)));
+        Assert.True(ray.Intersects(new Circle2(Vector2.Zero, 1f)));
+        Assert.False(ray.Intersects(new Circle2(new Vector2(0f, 5f), 1f)));
     }
 
     [Fact]
-    public void Ray_IntersectsSegment()
+    public void Ray2_IntersectsSegment2()
     {
-        Ray ray = new(new Vector2(-5f, 0f), Vector2.UnitX);
-        Segment segment = new(new Vector2(0f, -2f), new Vector2(0f, 2f));
+        Ray2 ray = new(new Vector2(-5f, 0f), Vector2.UnitX);
+        Segment2 segment = new(new Vector2(0f, -2f), new Vector2(0f, 2f));
 
         Assert.True(ray.Intersects(segment));
-        Assert.False(ray.Intersects(new Segment(new Vector2(0f, 5f), new Vector2(0f, 8f))));
+        Assert.False(ray.Intersects(new Segment2(new Vector2(0f, 5f), new Vector2(0f, 8f))));
     }
 }

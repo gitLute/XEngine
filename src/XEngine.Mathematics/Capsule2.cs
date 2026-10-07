@@ -5,7 +5,7 @@ namespace XEngine.Mathematics;
 /// <summary>
 /// Капсула: отрезок, утолщённый на радиус. Основная форма коллайдера персонажей.
 /// </summary>
-public readonly struct Capsule : IEquatable<Capsule>
+public readonly struct Capsule2 : IEquatable<Capsule2>
 {
     /// <summary>
     /// Создаёт капсулу из отрезка и радиуса.
@@ -13,14 +13,14 @@ public readonly struct Capsule : IEquatable<Capsule>
     /// <param name="segment">Осевая линия капсулы.</param>
     /// <param name="radius">Радиус. Отрицательные значения не допускаются.</param>
     /// <exception cref="ArgumentOutOfRangeException">Радиус отрицательный.</exception>
-    public Capsule(Segment segment, float radius)
+    public Capsule2(Segment2 segment, float radius)
     {
         if (radius < 0f)
         {
             throw new ArgumentOutOfRangeException(nameof(radius), radius, "Радиус не может быть отрицательным.");
         }
 
-        Segment = segment;
+        Segment2 = segment;
         Radius = radius;
     }
 
@@ -30,7 +30,7 @@ public readonly struct Capsule : IEquatable<Capsule>
     /// </summary>
     /// <param name="bounds">Ограничивающий прямоугольник.</param>
     /// <returns>Капсула внутри прямоугольника.</returns>
-    public static Capsule FromBounds(Aabb bounds)
+    public static Capsule2 FromBounds(Aabb2 bounds)
     {
         Vector2 size = bounds.Size;
         float radius = MathF.Min(size.X, size.Y) * 0.5f;
@@ -38,13 +38,13 @@ public readonly struct Capsule : IEquatable<Capsule>
             MathF.Max(0f, (size.X * 0.5f) - radius),
             MathF.Max(0f, (size.Y * 0.5f) - radius));
         Vector2 center = bounds.Center;
-        return new Capsule(new Segment(center - halfDelta, center + halfDelta), radius);
+        return new Capsule2(new Segment2(center - halfDelta, center + halfDelta), radius);
     }
 
     /// <summary>
     /// Осевая линия капсулы.
     /// </summary>
-    public Segment Segment { get; }
+    public Segment2 Segment2 { get; }
 
     /// <summary>
     /// Радиус капсулы.
@@ -54,24 +54,24 @@ public readonly struct Capsule : IEquatable<Capsule>
     /// <summary>
     /// Начало осевой линии.
     /// </summary>
-    public Vector2 A => Segment.A;
+    public Vector2 A => Segment2.A;
 
     /// <summary>
     /// Конец осевой линии.
     /// </summary>
-    public Vector2 B => Segment.B;
+    public Vector2 B => Segment2.B;
 
     /// <summary>
     /// AABB, описанный вокруг капсулы.
     /// </summary>
-    public Aabb Bounds => Segment.Bounds.Expand(new Vector2(Radius, Radius));
+    public Aabb2 Bounds => Segment2.Bounds.Expand(new Vector2(Radius, Radius));
 
     /// <summary>
     /// Проверяет, находится ли точка внутри капсулы.
     /// </summary>
     /// <param name="point">Проверяемая точка.</param>
     /// <returns><c>true</c>, если точка внутри.</returns>
-    public bool Contains(Vector2 point) => Segment.DistanceTo(point) <= Radius;
+    public bool Contains(Vector2 point) => Segment2.DistanceTo(point) <= Radius;
 
     /// <summary>
     /// Возвращает ближайшую к заданной точку границы капсулы.
@@ -80,7 +80,7 @@ public readonly struct Capsule : IEquatable<Capsule>
     /// <returns>Точка на границе капсулы.</returns>
     public Vector2 ClosestPointOnBoundary(Vector2 point)
     {
-        Vector2 closest = Segment.ClosestPointTo(point);
+        Vector2 closest = Segment2.ClosestPointTo(point);
         Vector2 delta = point - closest;
         return delta.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon
             ? closest + new Vector2(Radius, 0f)
@@ -88,13 +88,13 @@ public readonly struct Capsule : IEquatable<Capsule>
     }
 
     /// <inheritdoc/>
-    public bool Equals(Capsule other) => Segment.Equals(other.Segment) && Radius.Equals(other.Radius);
+    public bool Equals(Capsule2 other) => Segment2.Equals(other.Segment2) && Radius.Equals(other.Radius);
 
     /// <inheritdoc/>
-    public override bool Equals(object? obj) => obj is Capsule other && Equals(other);
+    public override bool Equals(object? obj) => obj is Capsule2 other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Segment, Radius);
+    public override int GetHashCode() => HashCode.Combine(Segment2, Radius);
 
     /// <summary>
     /// Сравнивает капсулы на равенство.
@@ -102,7 +102,7 @@ public readonly struct Capsule : IEquatable<Capsule>
     /// <param name="left">Первая капсула.</param>
     /// <param name="right">Вторая капсула.</param>
     /// <returns><c>true</c>, если капсулы равны.</returns>
-    public static bool operator ==(Capsule left, Capsule right) => left.Equals(right);
+    public static bool operator ==(Capsule2 left, Capsule2 right) => left.Equals(right);
 
     /// <summary>
     /// Сравнивает капсулы на неравенство.
@@ -110,8 +110,8 @@ public readonly struct Capsule : IEquatable<Capsule>
     /// <param name="left">Первая капсула.</param>
     /// <param name="right">Вторая капсула.</param>
     /// <returns><c>true</c>, если капсулы различаются.</returns>
-    public static bool operator !=(Capsule left, Capsule right) => !left.Equals(right);
+    public static bool operator !=(Capsule2 left, Capsule2 right) => !left.Equals(right);
 
     /// <inheritdoc/>
-    public override string ToString() => $"Capsule({A} -> {B}, r={Radius:F2})";
+    public override string ToString() => $"Capsule2({A} -> {B}, r={Radius:F2})";
 }

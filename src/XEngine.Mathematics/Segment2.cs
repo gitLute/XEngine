@@ -5,14 +5,14 @@ namespace XEngine.Mathematics;
 /// <summary>
 /// Отрезок между двумя точками.
 /// </summary>
-public readonly struct Segment : IEquatable<Segment>
+public readonly struct Segment2 : IEquatable<Segment2>
 {
     /// <summary>
     /// Создаёт отрезок.
     /// </summary>
     /// <param name="a">Начало отрезка.</param>
     /// <param name="b">Конец отрезка.</param>
-    public Segment(Vector2 a, Vector2 b)
+    public Segment2(Vector2 a, Vector2 b)
     {
         A = a;
         B = b;
@@ -51,7 +51,7 @@ public readonly struct Segment : IEquatable<Segment>
     /// <summary>
     /// AABB, описанный вокруг отрезка.
     /// </summary>
-    public Aabb Bounds => Aabb.FromPoints([A, B]);
+    public Aabb2 Bounds => Aabb2.FromPoints([A, B]);
 
     /// <summary>
     /// Возвращает ближайшую к заданной точку отрезка.
@@ -79,10 +79,10 @@ public readonly struct Segment : IEquatable<Segment>
     public float DistanceTo(Vector2 point) => (point - ClosestPointTo(point)).Length();
 
     /// <inheritdoc/>
-    public bool Equals(Segment other) => A.Equals(other.A) && B.Equals(other.B);
+    public bool Equals(Segment2 other) => A.Equals(other.A) && B.Equals(other.B);
 
     /// <inheritdoc/>
-    public override bool Equals(object? obj) => obj is Segment other && Equals(other);
+    public override bool Equals(object? obj) => obj is Segment2 other && Equals(other);
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(A, B);
@@ -93,7 +93,7 @@ public readonly struct Segment : IEquatable<Segment>
     /// <param name="left">Первый отрезок.</param>
     /// <param name="right">Вторый отрезок.</param>
     /// <returns><c>true</c>, если отрезки равны.</returns>
-    public static bool operator ==(Segment left, Segment right) => left.Equals(right);
+    public static bool operator ==(Segment2 left, Segment2 right) => left.Equals(right);
 
     /// <summary>
     /// Сравнивает отрезки на неравенство.
@@ -101,8 +101,8 @@ public readonly struct Segment : IEquatable<Segment>
     /// <param name="left">Первый отрезок.</param>
     /// <param name="right">Второй отрезок.</param>
     /// <returns><c>true</c>, если отрезки различаются.</returns>
-    public static bool operator !=(Segment left, Segment right) => !left.Equals(right);
+    public static bool operator !=(Segment2 left, Segment2 right) => !left.Equals(right);
 
     /// <inheritdoc/>
-    public override string ToString() => $"Segment({A} -> {B})";
+    public override string ToString() => $"Segment2({A} -> {B})";
 }

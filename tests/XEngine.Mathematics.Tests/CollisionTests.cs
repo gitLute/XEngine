@@ -86,46 +86,46 @@ public sealed class CollisionTests
     }
 
     [Fact]
-    public void SegmentSegmentDistance_ParallelSegments()
+    public void Segment2Distance_ParallelSegments()
     {
-        Segment first = new(new Vector2(0f, 0f), new Vector2(10f, 0f));
-        Segment second = new(new Vector2(0f, 3f), new Vector2(10f, 3f));
+        Segment2 first = new(new Vector2(0f, 0f), new Vector2(10f, 0f));
+        Segment2 second = new(new Vector2(0f, 3f), new Vector2(10f, 3f));
 
         Assert.Equal(3f, Collision.SegmentSegmentDistance(first, second), 1e-4f);
     }
 
     [Fact]
-    public void SegmentSegmentDistance_CrossingIsZero()
+    public void Segment2Distance_CrossingIsZero()
     {
-        Segment first = new(new Vector2(-5f, 0f), new Vector2(5f, 0f));
-        Segment second = new(new Vector2(0f, -5f), new Vector2(0f, 5f));
+        Segment2 first = new(new Vector2(-5f, 0f), new Vector2(5f, 0f));
+        Segment2 second = new(new Vector2(0f, -5f), new Vector2(0f, 5f));
 
         Assert.Equal(0f, Collision.SegmentSegmentDistance(first, second), 1e-4f);
     }
 
     [Fact]
-    public void SegmentSegmentDistance_Disjoint()
+    public void Segment2Distance_Disjoint()
     {
-        Segment first = new(new Vector2(0f, 0f), new Vector2(1f, 0f));
-        Segment second = new(new Vector2(0f, 4f), new Vector2(1f, 4f));
+        Segment2 first = new(new Vector2(0f, 0f), new Vector2(1f, 0f));
+        Segment2 second = new(new Vector2(0f, 4f), new Vector2(1f, 4f));
 
         Assert.Equal(4f, Collision.SegmentSegmentDistance(first, second), 1e-4f);
     }
 
     [Fact]
-    public void CapsuleIntersection_Overlapping()
+    public void Capsule2Intersection_Overlapping()
     {
-        Capsule first = new(new Segment(new Vector2(-2f, 0f), new Vector2(2f, 0f)), 1f);
-        Capsule second = new(new Segment(new Vector2(-2f, 1f), new Vector2(2f, 1f)), 1f);
+        Capsule2 first = new(new Segment2(new Vector2(-2f, 0f), new Vector2(2f, 0f)), 1f);
+        Capsule2 second = new(new Segment2(new Vector2(-2f, 1f), new Vector2(2f, 1f)), 1f);
 
         Assert.True(Collision.Intersects(first, second));
     }
 
     [Fact]
-    public void CapsuleIntersection_Disjoint()
+    public void Capsule2Intersection_Disjoint()
     {
-        Capsule first = new(new Segment(new Vector2(-2f, 0f), new Vector2(2f, 0f)), 0.5f);
-        Capsule second = new(new Segment(new Vector2(-2f, 5f), new Vector2(2f, 5f)), 0.5f);
+        Capsule2 first = new(new Segment2(new Vector2(-2f, 0f), new Vector2(2f, 0f)), 0.5f);
+        Capsule2 second = new(new Segment2(new Vector2(-2f, 5f), new Vector2(2f, 5f)), 0.5f);
 
         Assert.False(Collision.Intersects(first, second));
     }

@@ -6,14 +6,14 @@ namespace XEngine.Mathematics;
 /// Осевой ограничивающий прямоугольник в двумерном пространстве.
 /// Используется для отсечения объектов камерой и широкой фазы коллизий.
 /// </summary>
-public readonly struct Aabb : IEquatable<Aabb>
+public readonly struct Aabb2 : IEquatable<Aabb2>
 {
     /// <summary>
     /// Создаёт AABB из минимальной и максимальной точек.
     /// </summary>
     /// <param name="min">Минимальная точка.</param>
     /// <param name="max">Максимальная точка.</param>
-    public Aabb(Vector2 min, Vector2 max)
+    public Aabb2(Vector2 min, Vector2 max)
     {
         Min = Vector2.Min(min, max);
         Max = Vector2.Max(min, max);
@@ -24,7 +24,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// и используется как начальное значение при поиске границ.
     /// </summary>
     /// <param name="value">Координата точки.</param>
-    public Aabb(float value)
+    public Aabb2(float value)
     {
         Min = new Vector2(value, value);
         Max = new Vector2(value, value);
@@ -36,7 +36,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// <param name="center">Центр.</param>
     /// <param name="halfSize">Половина размера по каждой оси.</param>
     /// <returns>AABB.</returns>
-    public static Aabb FromCenterAndHalfSize(Vector2 center, Vector2 halfSize)
+    public static Aabb2 FromCenterAndHalfSize(Vector2 center, Vector2 halfSize)
         => new(center - halfSize, center + halfSize);
 
     /// <summary>
@@ -44,7 +44,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// </summary>
     /// <param name="center">Центр.</param>
     /// <param name="size">Полный размер.</param>
-    public static Aabb FromCenterAndSize(Vector2 center, Vector2 size)
+    public static Aabb2 FromCenterAndSize(Vector2 center, Vector2 size)
         => new(center - size * 0.5f, center + size * 0.5f);
 
     /// <summary>
@@ -53,7 +53,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// <param name="points">Точки, которые должны быть покрыты.</param>
     /// <returns>AABB, содержащий все точки.</returns>
     /// <exception cref="ArgumentException">Список точек пуст.</exception>
-    public static Aabb FromPoints(ReadOnlySpan<Vector2> points)
+    public static Aabb2 FromPoints(ReadOnlySpan<Vector2> points)
     {
         if (points.Length == 0)
         {
@@ -68,7 +68,7 @@ public readonly struct Aabb : IEquatable<Aabb>
             max = Vector2.Max(max, points[i]);
         }
 
-        return new Aabb(min, max);
+        return new Aabb2(min, max);
     }
 
     /// <summary>
@@ -76,7 +76,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// </summary>
     /// <param name="rect">Прямоугольник.</param>
     /// <returns>AABB.</returns>
-    public static Aabb FromRect(Rect rect) => new(rect.Position, rect.Position + rect.Size);
+    public static Aabb2 FromRect(Rect rect) => new(rect.Position, rect.Position + rect.Size);
 
     /// <summary>
     /// Пустой AABB, не содержащий ни одной конечной точки.
@@ -84,7 +84,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// использовать нельзя: пустой AABB — это вырожденная точка на бесконечности,
     /// которая не содержится ни в одном запросе и поглощается при объединении.
     /// </summary>
-    public static Aabb Empty => new(float.PositiveInfinity);
+    public static Aabb2 Empty => new(float.PositiveInfinity);
 
     /// <summary>
     /// Минимальная точка.
@@ -129,7 +129,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// </summary>
     /// <param name="other">Другой AABB.</param>
     /// <returns><c>true</c>, если AABB пересекаются.</returns>
-    public bool Intersects(Aabb other)
+    public bool Intersects(Aabb2 other)
         => other.Min.X <= Max.X && other.Max.X >= Min.X && other.Min.Y <= Max.Y && other.Max.Y >= Min.Y;
 
     /// <summary>
@@ -137,7 +137,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// </summary>
     /// <param name="other">Другой AABB.</param>
     /// <returns><c>true</c>, если текущий AABB содержит другой.</returns>
-    public bool Contains(Aabb other)
+    public bool Contains(Aabb2 other)
         => other.Min.X >= Min.X && other.Max.X <= Max.X && other.Min.Y >= Min.Y && other.Max.Y <= Max.Y;
 
     /// <summary>
@@ -145,7 +145,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// </summary>
     /// <param name="other">Другой AABB.</param>
     /// <returns>Объединение.</returns>
-    public Aabb Union(Aabb other)
+    public Aabb2 Union(Aabb2 other)
     {
         if (IsEmpty)
         {
@@ -157,7 +157,7 @@ public readonly struct Aabb : IEquatable<Aabb>
             return this;
         }
 
-        return new Aabb(Vector2.Min(Min, other.Min), Vector2.Max(Max, other.Max));
+        return new Aabb2(Vector2.Min(Min, other.Min), Vector2.Max(Max, other.Max));
     }
 
     /// <summary>
@@ -165,7 +165,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// </summary>
     /// <param name="amount">Отступ.</param>
     /// <returns>Расширенный AABB.</returns>
-    public Aabb Expand(Vector2 amount) => new(Min - amount, Max + amount);
+    public Aabb2 Expand(Vector2 amount) => new(Min - amount, Max + amount);
 
     /// <summary>
     /// Возвращает ближайшую точку AABB к заданной точке.
@@ -201,10 +201,10 @@ public readonly struct Aabb : IEquatable<Aabb>
     ];
 
     /// <inheritdoc/>
-    public bool Equals(Aabb other) => Min.Equals(other.Min) && Max.Equals(other.Max);
+    public bool Equals(Aabb2 other) => Min.Equals(other.Min) && Max.Equals(other.Max);
 
     /// <inheritdoc/>
-    public override bool Equals(object? obj) => obj is Aabb other && Equals(other);
+    public override bool Equals(object? obj) => obj is Aabb2 other && Equals(other);
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Min, Max);
@@ -215,7 +215,7 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// <param name="left">Первый AABB.</param>
     /// <param name="right">Второй AABB.</param>
     /// <returns><c>true</c>, если AABB равны.</returns>
-    public static bool operator ==(Aabb left, Aabb right) => left.Equals(right);
+    public static bool operator ==(Aabb2 left, Aabb2 right) => left.Equals(right);
 
     /// <summary>
     /// Сравнивает AABB на неравенство.
@@ -223,8 +223,8 @@ public readonly struct Aabb : IEquatable<Aabb>
     /// <param name="left">Первый AABB.</param>
     /// <param name="right">Второй AABB.</param>
     /// <returns><c>true</c>, если AABB различаются.</returns>
-    public static bool operator !=(Aabb left, Aabb right) => !left.Equals(right);
+    public static bool operator !=(Aabb2 left, Aabb2 right) => !left.Equals(right);
 
     /// <inheritdoc/>
-    public override string ToString() => $"Aabb({Min} .. {Max})";
+    public override string ToString() => $"Aabb2({Min} .. {Max})";
 }

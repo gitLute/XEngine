@@ -15,7 +15,7 @@ public static class Collision
     /// <param name="a">Первый AABB.</param>
     /// <param name="b">Второй AABB.</param>
     /// <returns><c>true</c>, если AABB пересекаются.</returns>
-    public static bool Intersects(Aabb a, Aabb b) => a.Intersects(b);
+    public static bool Intersects(Aabb2 a, Aabb2 b) => a.Intersects(b);
 
     /// <summary>
     /// Проверяет пересечение двух повёрнутых прямоугольников по разделяющим осям (SAT).
@@ -103,14 +103,14 @@ public static class Collision
     /// <param name="a">Первая капсула.</param>
     /// <param name="b">Вторая капсула.</param>
     /// <returns><c>true</c>, если капсулы пересекаются.</returns>
-    public static bool Intersects(Capsule a, Capsule b)
+    public static bool Intersects(Capsule2 a, Capsule2 b)
     {
         if (!a.Bounds.Intersects(b.Bounds))
         {
             return false;
         }
 
-        float distance = SegmentSegmentDistance(a.Segment, b.Segment);
+        float distance = SegmentSegmentDistance(a.Segment2, b.Segment2);
         float radii = a.Radius + b.Radius;
         return distance * distance <= radii * radii;
     }
@@ -121,7 +121,7 @@ public static class Collision
     /// <param name="a">Первый отрезок.</param>
     /// <param name="b">Второй отрезок.</param>
     /// <returns>Минимальное расстояние между отрезками.</returns>
-    public static float SegmentSegmentDistance(Segment a, Segment b)
+    public static float SegmentSegmentDistance(Segment2 a, Segment2 b)
     {
         Vector2 p = a.A;
         Vector2 q = b.A;

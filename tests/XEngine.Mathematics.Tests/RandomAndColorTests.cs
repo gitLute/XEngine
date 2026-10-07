@@ -128,7 +128,7 @@ public sealed class RandomAndColorTests
     public void NextInside_StaysInBounds()
     {
         XorShift64Star generator = new(41);
-        Aabb bounds = new(new Vector2(-1f, -1f), new Vector2(2f, 3f));
+        Aabb2 bounds = new(new Vector2(-1f, -1f), new Vector2(2f, 3f));
 
         for (int i = 0; i < 200; i++)
         {

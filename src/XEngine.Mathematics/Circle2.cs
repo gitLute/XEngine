@@ -5,7 +5,7 @@ namespace XEngine.Mathematics;
 /// <summary>
 /// Круг в двумерном пространстве.
 /// </summary>
-public readonly struct Circle : IEquatable<Circle>
+public readonly struct Circle2 : IEquatable<Circle2>
 {
     /// <summary>
     /// Создаёт круг.
@@ -13,7 +13,7 @@ public readonly struct Circle : IEquatable<Circle>
     /// <param name="center">Центр круга.</param>
     /// <param name="radius">Радиус. Отрицательные значения не допускаются.</param>
     /// <exception cref="ArgumentOutOfRangeException">Радиус отрицательный.</exception>
-    public Circle(Vector2 center, float radius)
+    public Circle2(Vector2 center, float radius)
     {
         if (radius < 0f)
         {
@@ -42,7 +42,7 @@ public readonly struct Circle : IEquatable<Circle>
     /// <summary>
     /// AABB, описанный вокруг круга.
     /// </summary>
-    public Aabb Bounds => Aabb.FromCenterAndHalfSize(Center, new Vector2(Radius, Radius));
+    public Aabb2 Bounds => Aabb2.FromCenterAndHalfSize(Center, new Vector2(Radius, Radius));
 
     /// <summary>
     /// Проверяет, находится ли точка внутри круга.
@@ -56,7 +56,7 @@ public readonly struct Circle : IEquatable<Circle>
     /// </summary>
     /// <param name="other">Другой круг.</param>
     /// <returns><c>true</c>, если круги пересекаются.</returns>
-    public bool Intersects(Circle other)
+    public bool Intersects(Circle2 other)
         => (other.Center - Center).LengthSquared() <= (Radius + other.Radius) * (Radius + other.Radius);
 
     /// <summary>
@@ -77,13 +77,13 @@ public readonly struct Circle : IEquatable<Circle>
     /// </summary>
     /// <param name="offset">Вектор смещения.</param>
     /// <returns>Смещённый круг.</returns>
-    public Circle Translated(Vector2 offset) => new(Center + offset, Radius);
+    public Circle2 Translated(Vector2 offset) => new(Center + offset, Radius);
 
     /// <inheritdoc/>
-    public bool Equals(Circle other) => Center.Equals(other.Center) && Radius.Equals(other.Radius);
+    public bool Equals(Circle2 other) => Center.Equals(other.Center) && Radius.Equals(other.Radius);
 
     /// <inheritdoc/>
-    public override bool Equals(object? obj) => obj is Circle other && Equals(other);
+    public override bool Equals(object? obj) => obj is Circle2 other && Equals(other);
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Center, Radius);
@@ -94,7 +94,7 @@ public readonly struct Circle : IEquatable<Circle>
     /// <param name="left">Первый круг.</param>
     /// <param name="right">Второй круг.</param>
     /// <returns><c>true</c>, если круги равны.</returns>
-    public static bool operator ==(Circle left, Circle right) => left.Equals(right);
+    public static bool operator ==(Circle2 left, Circle2 right) => left.Equals(right);
 
     /// <summary>
     /// Сравнивает круги на неравенство.
@@ -102,8 +102,8 @@ public readonly struct Circle : IEquatable<Circle>
     /// <param name="left">Первый круг.</param>
     /// <param name="right">Второй круг.</param>
     /// <returns><c>true</c>, если круги различаются.</returns>
-    public static bool operator !=(Circle left, Circle right) => !left.Equals(right);
+    public static bool operator !=(Circle2 left, Circle2 right) => !left.Equals(right);
 
     /// <inheritdoc/>
-    public override string ToString() => $"Circle({Center}, r={Radius:F2})";
+    public override string ToString() => $"Circle2({Center}, r={Radius:F2})";
 }

@@ -151,7 +151,7 @@ public static class RandomExtensions
     /// <param name="random">Источник случайности.</param>
     /// <param name="bounds">Ограничивающий прямоугольник.</param>
     /// <returns>Случайная точка внутри.</returns>
-    public static Vector2 NextInside(this IRandomSource random, Aabb bounds)
+    public static Vector2 NextInside(this IRandomSource random, Aabb2 bounds)
     {
         ArgumentNullException.ThrowIfNull(random);
         return new Vector2(
