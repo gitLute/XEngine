@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Инструмент сборки атласов. Не часть движка: лежит вне слоёв, не ссылается
+    ни на один проект из src/ (5.2) и не попадает в выдачу игры (5.5).
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>AtlasBuilder</RootNamespace>
+    <AssemblyName>AtlasBuilder</AssemblyName>
+    <Description>Сборка текстурных атласов: проверяет разметку регионов и пишет atlas.png и atlas.json.</Description>
+  </PropertyGroup>
+
+</Project>

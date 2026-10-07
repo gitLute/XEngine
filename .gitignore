@@ -379,3 +379,7 @@ out/*
 tmp/*
 !tmp/.gitkeep
 img/
+
+# Результат tools/AtlasBuilder (14.2): файлы собираются, вручную не правятся.
+assets/textures/atlas.png
+assets/textures/atlas.json

@@ -1,0 +1,22 @@
+{
+  "name": "world",
+  "width": 64,
+  "height": 32,
+  "bleedingPixels": 2,
+  "regions": [
+    {
+      "name": "stone",
+      "source": "stone.png",
+      "rect": { "x": 0, "y": 0, "width": 32, "height": 32 },
+      "sizeTexels": { "x": 32, "y": 32 },
+      "texelsPerMeter": 16
+    },
+    {
+      "name": "wood",
+      "source": "wood.png",
+      "rect": { "x": 34, "y": 0, "width": 16, "height": 16 },
+      "sizeTexels": { "x": 16, "y": 16 },
+      "texelsPerMeter": 16
+    }
+  ]
+}
