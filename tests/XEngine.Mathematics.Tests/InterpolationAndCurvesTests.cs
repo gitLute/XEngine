@@ -221,6 +221,59 @@ public sealed class InterpolationAndCurvesTests
     }
 
     [Fact]
+    public void QuadraticBezier3_ReturnsEndpoints()
+    {
+        Vector3 a = new(0f, 0f, 0f);
+        Vector3 b = new(0f, 10f, 0f);
+        Vector3 c = new(10f, 0f, 0f);
+
+        MathAssert.Equal(a, Curves.QuadraticBezier(a, b, c, 0f), 1e-4f);
+        MathAssert.Equal(c, Curves.QuadraticBezier(a, b, c, 1f), 1e-4f);
+    }
+
+    [Fact]
+    public void QuadraticBezier3_InterpolatesLinearlyWhenControlPointIsOnLine()
+    {
+        Vector3 a = new(0f, 0f, 0f);
+        Vector3 b = new(5f, 0f, 0f);
+        Vector3 c = new(10f, 0f, 0f);
+
+        MathAssert.Equal(new Vector3(5f, 0f, 0f), Curves.QuadraticBezier(a, b, c, 0.5f), 1e-4f);
+    }
+
+    [Fact]
+    public void QuadraticBezier3_StaysInsideControlPointHull()
+    {
+        Vector3 a = new(0f, 0f, 0f);
+        Vector3 b = new(4f, 8f, 2f);
+        Vector3 c = new(10f, 0f, -4f);
+
+        for (int step = 0; step <= 10; step++)
+        {
+            Vector3 point = Curves.QuadraticBezier(a, b, c, step / 10f);
+            Assert.InRange(point.X, -0.001f, 10.001f);
+            Assert.InRange(point.Y, -0.001f, 8.001f);
+            Assert.InRange(point.Z, -4.001f, 2.001f);
+        }
+    }
+
+    [Fact]
+    public void CubicBezier3_ReturnsEndpointsAndMiddleOfStraightLine()
+    {
+        Vector3 a = new(0f, 1f, 0f);
+        Vector3 b = new(3f, 2f, 1f);
+        Vector3 c = new(6f, 2f, 1f);
+        Vector3 d = new(9f, 1f, 0f);
+
+        MathAssert.Equal(a, Curves.CubicBezier(a, b, c, d, 0f), 1e-4f);
+        MathAssert.Equal(d, Curves.CubicBezier(a, b, c, d, 1f), 1e-4f);
+
+        // В середине параметра кубическая кривая равна взвешенному среднему
+        // контрольных точек с весами 1, 3, 3, 1.
+        MathAssert.Equal(new Vector3(4.5f, 1.75f, 0.75f), Curves.CubicBezier(a, b, c, d, 0.5f), 1e-4f);
+    }
+
+    [Fact]
     public void QuadraticBezier_ReturnsEndpoints()
     {
         Vector2 a = Vector2.Zero;

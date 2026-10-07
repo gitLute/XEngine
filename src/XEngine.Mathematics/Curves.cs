@@ -236,4 +236,47 @@ public static class Curves
         float u = 1f - t;
         return controlPointA * (u * u) + controlPointB * (2f * u * t) + controlPointC * (t * t);
     }
+
+    /// <summary>
+    /// Вычисляет позицию на трёхмерной кривой Безье второго порядка.
+    /// </summary>
+    /// <param name="controlPointA">Первая контрольная точка.</param>
+    /// <param name="controlPointB">Вторая контрольная точка.</param>
+    /// <param name="controlPointC">Конечная точка.</param>
+    /// <param name="t">Параметр кривой.</param>
+    /// <returns>Точка кривой.</returns>
+    /// <remarks>
+    /// Отдельный тип сглаживания не вводится: интерполяция величин уже покрыта
+    /// <see cref="Interpolation"/>, а здесь только форма кривой.
+    /// </remarks>
+    public static Vector3 QuadraticBezier(Vector3 controlPointA, Vector3 controlPointB, Vector3 controlPointC, float t)
+    {
+        float u = 1f - t;
+        return controlPointA * (u * u) + controlPointB * (2f * u * t) + controlPointC * (t * t);
+    }
+
+    /// <summary>
+    /// Вычисляет позицию на трёхмерной кривой Безье третьего порядка.
+    /// </summary>
+    /// <param name="controlPointA">Первая контрольная точка.</param>
+    /// <param name="controlPointB">Вторая контрольная точка.</param>
+    /// <param name="controlPointC">Третья контрольная точка.</param>
+    /// <param name="controlPointD">Конечная точка.</param>
+    /// <param name="t">Параметр кривой.</param>
+    /// <returns>Точка кривой.</returns>
+    public static Vector3 CubicBezier(
+        Vector3 controlPointA,
+        Vector3 controlPointB,
+        Vector3 controlPointC,
+        Vector3 controlPointD,
+        float t)
+    {
+        float u = 1f - t;
+        float uu = u * u;
+        float tt = t * t;
+        return (controlPointA * (uu * u))
+            + (controlPointB * (3f * uu * t))
+            + (controlPointC * (3f * u * tt))
+            + (controlPointD * (tt * t));
+    }
 }
