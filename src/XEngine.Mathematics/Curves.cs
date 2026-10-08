@@ -27,7 +27,15 @@ public static class Curves
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float OutQuad(float t) => 1f - (1f - t) * (1f - t);
+    /// <remarks>
+    /// Раскрытое тождество <c>1 - (1 - t)² = t(2 - t)</c>. Запись через
+    /// <c>1 - t</c> теряла точность в начале интервала: при <c>t = 1e-7</c>
+    /// ошибка была 19 %, потому что результат получается вычитанием из
+    /// единицы числа, отличающегося от единицы меньше чем на половину
+    /// последнего разряда. Раскрытая форма умножает на <c>t</c>, то есть на
+    /// величину того же порядка, что и результат.
+    /// </remarks>
+    public static float OutQuad(float t) => t * (2f - t);
 
     /// <summary>
     /// Квадратичное ускорение и замедление.
@@ -123,7 +131,15 @@ public static class Curves
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float OutExpo(float t) => t >= 1f ? 1f : 1f - Trig.Pow2(-10f * t);
+    /// <remarks>
+    /// Считается как <c>1 - 2^(-10t) = 1 - e^(-10t·ln2)</c> через
+    /// <see cref="Trig.OneMinusExp"/>. Наивная запись <c>1 - Pow2(-10t)</c>
+    /// теряла точность в начале интервала: при <c>t = 1e-7</c> ошибка была
+    /// 3.2 %, то есть результат 1.7e-7 возвращался с точностью до 0.5 % от
+    /// единицы вместо последнего разряда от самого результата.
+    /// </remarks>
+    public static float OutExpo(float t)
+        => t >= 1f ? 1f : Trig.OneMinusExp(-10f * t * 0.69314718f);
 
     /// <summary>
     /// Экспоненциальное ускорение и замедление.
@@ -168,11 +184,15 @@ public static class Curves
     /// <param name="t">Параметр кривой.</param>
     /// <param name="overshoot">Коэффициент перелёта, обычно 1..3.</param>
     /// <returns>Значение кривой.</returns>
+    /// <remarks>
+    /// Раскрытая в <c>t</c> форма <c>t((s+3) - (2s+3)t + (s+1)t²)</c>, тождественная
+    /// <c>(t-1)²((s+1)(t-1) + s) + 1</c>. Запись через <c>t - 1</c>
+    /// складывала число порядка единицы с малым слагаемым, то есть теряла
+    /// значащие цифры в начале интервала: при <c>t = 1e-7</c> ошибка была
+    /// 1.4 %.
+    /// </remarks>
     public static float OutBack(float t, float overshoot = 1.70158f)
-    {
-        float x = t - 1f;
-        return x * x * ((overshoot + 1f) * x + overshoot) + 1f;
-    }
+        => t * ((overshoot + 3f) + (t * ((-(2f * overshoot) - 3f) + (t * (overshoot + 1f)))));
 
     /// <summary>
     /// Ускорение с упругим эффектом.
