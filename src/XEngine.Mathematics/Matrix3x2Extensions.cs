@@ -18,11 +18,59 @@ public static class Matrix3x2Extensions
     /// <param name="scale">Масштаб по осям.</param>
     /// <param name="pivot">Опорная точка, остающаяся неподвижной при преобразовании.</param>
     /// <returns>Матрица преобразования.</returns>
+    /// <remarks>
+    /// Матрица собирается прямой формулой, а не произведением четырёх
+    /// матриц <c>System.Numerics</c>. Разница не в числе операций, а в
+    /// трансцендентных вызовах: <c>Matrix3x2.CreateRotation</c> внутри
+    /// обращается к математической библиотеке платформы, поэтому её
+    /// использование здесь обходило бы <see cref="Trig"/> и ломало
+    /// детерминированный вариант сборки.
+    /// <para>
+    /// Порядок применения к точке: сдвиг на <c>-pivot</c>, масштаб, поворот,
+    /// возврат в <c>pivot + position</c>. Он же совпадает с порядком
+    /// произведения матриц, то есть расхождение с тестом на неравномерном
+    /// масштабе означало бы ошибку в формуле.
+    /// </para>
+    /// </remarks>
     public static Matrix3x2 CreateTransform(Vector2 position, Angle rotation, Vector2 scale, Vector2 pivot = default)
-        => Matrix3x2.CreateTranslation(-pivot)
-           * Matrix3x2.CreateScale(scale)
-           * Matrix3x2.CreateRotation((float)rotation.Radians)
-           * Matrix3x2.CreateTranslation(pivot + position);
+    {
+        (float sin, float cos) = Trig.SinCos((float)rotation.Radians);
+
+        float originX = pivot.X + position.X;
+        float originY = pivot.Y + position.Y;
+
+        // Строки линейной части — образы базовых векторов, поэтому масштаб
+        // входит в первую строку по X и во вторую по Y.
+        float m11 = cos * scale.X;
+        float m12 = sin * scale.X;
+        float m21 = -sin * scale.Y;
+        float m22 = cos * scale.Y;
+
+        return new Matrix3x2(
+            m11,
+            m12,
+            m21,
+            m22,
+            originX - ((m11 * pivot.X) + (m21 * pivot.Y)),
+            originY - ((m12 * pivot.X) + (m22 * pivot.Y)));
+    }
+
+    /// <summary>
+    /// Строит матрицу поворота вокруг начала координат.
+    /// </summary>
+    /// <param name="angle">Угол против часовой стрелки.</param>
+    /// <returns>Матрица поворота.</returns>
+    /// <remarks>
+    /// Собственная реализация вместо <c>Matrix3x2.CreateRotation</c>: та
+    /// внутри зовёт математическую библиотеку платформы, то есть обходит
+    /// <see cref="Trig"/> и делает результат зависимым от операционной
+    /// системы.
+    /// </remarks>
+    public static Matrix3x2 CreateRotation(Angle angle)
+    {
+        (float sin, float cos) = Trig.SinCos((float)angle.Radians);
+        return new Matrix3x2(cos, sin, -sin, cos, 0f, 0f);
+    }
 
     /// <summary>
     /// Преобразует точку матрицей.

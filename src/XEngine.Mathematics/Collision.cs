@@ -274,8 +274,10 @@ public static class Collision
     /// </remarks>
     public static bool Contains(Vector2 point, Vector2 center, Vector2 size, Angle rotation)
     {
+        // Поворот считается через Trig, а не Matrix3x2.CreateRotation: тот
+        // внутри обращается к математической библиотеке платформы.
         Matrix3x2 inverse = Matrix3x2.CreateTranslation(-center)
-            * Matrix3x2.CreateRotation((float)-rotation.Radians);
+            * Matrix3x2Extensions.CreateRotation(-rotation);
         Vector2 local = Vector2.Transform(point, inverse);
         return MathF.Abs(local.X) <= size.X * 0.5f && MathF.Abs(local.Y) <= size.Y * 0.5f;
     }

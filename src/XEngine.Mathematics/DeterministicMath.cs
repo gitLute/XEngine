@@ -290,6 +290,33 @@ internal static class DeterministicMath
         return negative ? -result : result;
     }
 
+    /// <summary>
+    /// Арккосинус.
+    /// </summary>
+    /// <param name="x">Аргумент в <c>[-1; 1]</c>.</param>
+    /// <returns>Значение арккосинуса в <c>[0; π]</c>.</returns>
+    /// <remarks>
+    /// Считается как <c>atan2(√(1 - x²), x)</c>, а не рядом Тейлора: у
+    /// арккосинуса особая точка на единице, где ряд сходится медленно, и
+    /// вычитание <c>π/2 - asin(x)</c> теряет там все значащие цифры.
+    /// Квадратный корень определён точно спецификацией IEEE 754, поэтому
+    /// платформенным вызовом он не является.
+    /// </remarks>
+    public static float Acos(float x)
+    {
+        if (x >= 1f)
+        {
+            return 0f;
+        }
+
+        if (x <= -1f)
+        {
+            return MathF.PI;
+        }
+
+        return Atan2(MathF.Sqrt(1f - (x * x)), x);
+    }
+
     /// <summary>Экспонента.</summary>
     /// <param name="x">Показатель.</param>
     /// <returns>Значение e в степени <paramref name="x"/>.</returns>

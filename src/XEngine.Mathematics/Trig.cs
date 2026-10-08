@@ -142,6 +142,26 @@ public static class Trig
     }
 
     /// <summary>
+    /// Арккосинус.
+    /// </summary>
+    /// <param name="x">Аргумент в <c>[-1; 1]</c>.</param>
+    /// <returns>Значение арккосинуса.</returns>
+    /// <remarks>
+    /// Нужен интерполяции ориентаций: угол между двумя кватернионами считается
+    /// как <c>acos(скалярное произведение)</c>. Если бы такая операция
+    /// оставалась в <c>MathF</c>, детерминированный вариант перестал бы быть
+    /// детерминированным ровно на интерполяции поворота между кадрами.
+    /// </remarks>
+    public static float Acos(float x)
+    {
+#if XENGINE_DETERMINISTIC_MATH
+        return DeterministicMath.Acos(x);
+#else
+        return MathF.Acos(x);
+#endif
+    }
+
+    /// <summary>
     /// Экспонента.
     /// </summary>
     /// <param name="x">Показатель.</param>
