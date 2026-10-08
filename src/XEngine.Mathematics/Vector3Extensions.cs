@@ -34,10 +34,20 @@ public static class Vector3Extensions
     /// Ограничивает длину вектора сверху.
     /// </summary>
     /// <param name="vector">Исходный вектор.</param>
-    /// <param name="maxLength">Максимальная длина.</param>
+    /// <param name="maxLength">Максимальная длина, неотрицательная.</param>
     /// <returns>Вектор, длина которого не превышает <paramref name="maxLength"/>.</returns>
+    /// <remarks>
+    /// Отрицательный предел отвергается: квадрат его остаётся положительным,
+    /// поэтому длинный вектор нормализовался бы и умножался на отрицательное
+    /// число, то есть разворачивался. Длина соблюдалась бы, направление нет.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Предел отрицательный.</exception>
     public static Vector3 ClampLength(this Vector3 vector, float maxLength)
-        => vector.LengthSquared() <= maxLength * maxLength ? vector : Vector3.Normalize(vector) * maxLength;
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(maxLength);
+
+        return vector.LengthSquared() <= maxLength * maxLength ? vector : Vector3.Normalize(vector) * maxLength;
+    }
 
     /// <summary>
     /// Проецирует вектор на направление: возвращает компонент вдоль направления.

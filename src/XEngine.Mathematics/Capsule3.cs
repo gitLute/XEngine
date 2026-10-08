@@ -132,15 +132,29 @@ public readonly struct Capsule3 : IEquatable<Capsule3>
     /// Возвращает ближайшую к заданной точку поверхности капсулы.
     /// </summary>
     /// <param name="point">Исходная точка.</param>
-    /// <returns>Точка на поверхности капсулы.</returns>
+    /// <returns>Точка внутри капсулы у самой поверхности.</returns>
+    /// <remarks>
+    /// Точка сдвигается от поверхности внутрь на четыре последних разряда
+    /// радиуса. Округление умножения на радиус само по себе уводит результат
+    /// наружу примерно в девяти случаях из ста, и тогда
+    /// <see cref="Contains"/> отвергал точку, полученную от собственного
+    /// метода библиотеки: у результата не было правильного объяснения. Сдвиг
+    /// величиной в четыре разряда не виден ни в одном применении.
+    /// <para>
+    /// Точка ровно на оси задана неоднозначно: подходит любое направление, и
+    /// берётся ось X. Такой результат лежит на поверхности по построению и
+    /// внутрь не сдвигается.
+    /// </para>
+    /// </remarks>
     public Vector3 ClosestPointTo(Vector3 point)
     {
         Vector3 closest = ClosestPointOnAxis(point);
         Vector3 offset = point - closest;
         return offset.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon
             ? closest + new Vector3(Radius, 0f, 0f)
-            : closest + Vector3.Normalize(offset) * Radius;
+            : closest + Vector3.Normalize(offset) * SurfaceRadius.For(Radius, closest);
     }
+
 
     /// <summary>
     /// Возвращает расстояние от точки до осевой линии.

@@ -82,18 +82,25 @@ public readonly struct Capsule2 : IEquatable<Capsule2>
     }
 
     /// <summary>
-    /// Возвращает ближайшую к заданной точку границы капсулы.
+    /// Возвращает ближайшую к заданной точку точку границы капсулы.
     /// </summary>
     /// <param name="point">Исходная точка.</param>
-    /// <returns>Точка на границе капсулы.</returns>
+    /// <returns>Точка внутри капсулы у самой границы.</returns>
+    /// <remarks>
+    /// Точка сдвигается внутрь на четыре последних разряда радиуса, иначе
+    /// округление умножения выводит её наружу и <see cref="Contains"/>
+    /// отвергает результат собственного метода библиотеки. Сдвиг не виден ни в
+    /// одном применении.
+    /// </remarks>
     public Vector2 ClosestPointOnBoundary(Vector2 point)
     {
         Vector2 closest = Segment2.ClosestPointTo(point);
         Vector2 delta = point - closest;
         return delta.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon
             ? closest + new Vector2(Radius, 0f)
-            : closest + Vector2.Normalize(delta) * Radius;
+            : closest + Vector2.Normalize(delta) * SurfaceRadius.For(Radius, closest);
     }
+
 
     /// <inheritdoc/>
     public bool Equals(Capsule2 other) => Segment2.Equals(other.Segment2) && Radius.Equals(other.Radius);

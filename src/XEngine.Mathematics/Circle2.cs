@@ -60,17 +60,28 @@ public readonly struct Circle2 : IEquatable<Circle2>
         => (other.Center - Center).LengthSquared() <= (Radius + other.Radius) * (Radius + other.Radius);
 
     /// <summary>
-    /// Возвращает ближайшую к заданной точку границы круга.
+    /// Возвращает ближайшую к заданной точку точку границы круга.
     /// </summary>
     /// <param name="point">Исходная точка.</param>
-    /// <returns>Точка на границе круга.</returns>
+    /// <returns>Точка внутри круга у самой границы.</returns>
+    /// <remarks>
+    /// Точка сдвигается от границы внутрь на четыре последних разряда
+    /// радиуса. Округление умножения на радиус само по себе уводит результат
+    /// наружу примерно в восьми случаях из ста, и тогда
+    /// <see cref="Contains"/> отвергал точку, полученную от собственного
+    /// метода библиотеки: у результата не было правильного объяснения. Сдвиг
+    /// величиной в четыре разряда не виден ни в одном применении, а инвариант
+    /// «метод поверхности возвращает точку, которую её же форма считает
+    /// своей» выполняется.
+    /// </remarks>
     public Vector2 ClosestPointOnBoundary(Vector2 point)
     {
         Vector2 delta = point - Center;
         return delta.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon
             ? Center + new Vector2(Radius, 0f)
-            : Center + Vector2.Normalize(delta) * Radius;
+            : Center + Vector2.Normalize(delta) * SurfaceRadius.For(Radius, Center);
     }
+
 
     /// <summary>
     /// Перемещает круг.

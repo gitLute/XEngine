@@ -143,8 +143,17 @@ public readonly struct Rect : IEquatable<Rect>
     /// </summary>
     /// <param name="other">Проверяемый прямоугольник.</param>
     /// <returns><c>true</c>, если прямоугольник внутри.</returns>
+    /// <remarks>
+    /// Пустой прямоугольник не содержится ни в чём, включая другой пустой:
+    /// <see cref="Intersection"/> возвращает для непересекающихся областей
+    /// именно пустой прямоугольник, и такой результат обязан отвечать «не
+    /// содержится». То же правило и у <see cref="RectU.ContainsRect"/>, и
+    /// разойтись здесь нельзя было: два типа прямоугольников отвечают на
+    /// один и тот же вопрос по-разному.
+    /// </remarks>
     public bool Contains(Rect other)
-        => other.Left >= Left && other.Right <= Right && other.Top >= Top && other.Bottom <= Bottom;
+        => !other.IsEmpty
+            && other.Left >= Left && other.Right <= Right && other.Top >= Top && other.Bottom <= Bottom;
 
     /// <summary>
     /// Проверяет пересечение прямоугольников. Границы включительные: касание

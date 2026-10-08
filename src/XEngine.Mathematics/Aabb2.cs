@@ -193,9 +193,19 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// в точку на этой оси, а не переворачивает его: конструктор нормализует
     /// границы, поэтому наивный min/max из пересекшихся границ дал бы бокс
     /// больше исходного. Ведёт себя так же, как <see cref="Aabb3.Expand"/>.
+    /// <para>
+    /// Пустой AABB остаётся пустым. Без этой проверки его центр равен NaN,
+    /// потому что границы переставлены, и результат содержал бы NaN в обеих
+    /// границах вместо пустого значения.
+    /// </para>
     /// </remarks>
     public Aabb2 Expand(Vector2 amount)
     {
+        if (IsEmpty)
+        {
+            return this;
+        }
+
         Vector2 center = (Min + Max) * 0.5f;
         return new Aabb2(Vector2.Min(Min - amount, center), Vector2.Max(Max + amount, center));
     }

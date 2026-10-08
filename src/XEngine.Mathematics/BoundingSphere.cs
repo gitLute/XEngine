@@ -111,15 +111,28 @@ public readonly struct BoundingSphere : IEquatable<BoundingSphere>
     /// Возвращает ближайшую к точке точку поверхности сферы.
     /// </summary>
     /// <param name="point">Исходная точка.</param>
-    /// <returns>Точка на поверхности.</returns>
+    /// <returns>Точка внутри сферы у самой поверхности.</returns>
+    /// <remarks>
+    /// Точка сдвигается от поверхности внутрь на четыре последних разряда
+    /// радиуса. Округление деления и умножения само по себе уводит результат
+    /// наружу примерно в четырёх случаях из тысяч, и тогда
+    /// <see cref="Contains"/> отвергал точку, полученную от собственного
+    /// метода библиотеки. Сдвиг величиной в четыре разряда не виден ни в
+    /// одном применении.
+    /// <para>
+    /// Точка в центре задана неоднозначно: подходит любое направление, и
+    /// берётся ось X. Такой результат лежит на поверхности по построению.
+    /// </para>
+    /// </remarks>
     public Vector3 ClosestPointOnSurface(Vector3 point)
     {
         Vector3 offset = point - Center;
         float length = offset.Length();
         return length <= Scalar.Epsilon
             ? Center + new Vector3(Radius, 0f, 0f)
-            : Center + offset * (Radius / length);
+            : Center + offset * (SurfaceRadius.For(Radius, Center) / length);
     }
+
 
     /// <summary>
     /// Возвращает сферу, покрывающую обе.

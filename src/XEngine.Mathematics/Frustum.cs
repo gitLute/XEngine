@@ -253,13 +253,18 @@ public sealed class Frustum
 
         int visible = (int)Vector.Sum(total);
 
-        // Хвост, когда длина не кратна ширине вектора.
+        // Хвост, когда длина не кратна ширине вектора. Проверка идёт теми же
+        // шестью плоскостями напрямую, а не через BoundingSphere: её
+        // конструктор отвергает нечисловой радиус, то есть одно NaN в данных
+        // уровня обрывало бы пакетный отсекатель исключением в середине кадра.
         for (int index = count - (count % lanes); index < count; index++)
         {
-            BoundingSphere sphere = new(
-                new Vector3(centersX[index], centersY[index], centersZ[index]),
-                radii[index]);
-            if (frustum.Intersects(sphere))
+            if (IsSphereVisible(planes[0], centersX[index], centersY[index], centersZ[index], radii[index])
+                && IsSphereVisible(planes[1], centersX[index], centersY[index], centersZ[index], radii[index])
+                && IsSphereVisible(planes[2], centersX[index], centersY[index], centersZ[index], radii[index])
+                && IsSphereVisible(planes[3], centersX[index], centersY[index], centersZ[index], radii[index])
+                && IsSphereVisible(planes[4], centersX[index], centersY[index], centersZ[index], radii[index])
+                && IsSphereVisible(planes[5], centersX[index], centersY[index], centersZ[index], radii[index]))
             {
                 visible++;
             }
@@ -383,9 +388,43 @@ public sealed class Frustum
     private static float ProjectedRadius(in Vector3 normal, in Vector3 half)
         => (MathF.Abs(normal.X) * half.X) + (MathF.Abs(normal.Y) * half.Y) + (MathF.Abs(normal.Z) * half.Z);
 
+    /// <summary>
+    /// Видна ли сфера относительно одной плоскости.
+    /// </summary>
+    /// <remarks>
+    /// Отсечение записывается как «не меньше порога», а не «меньше порога».
+    /// На нечисловом значении первая запись ложна и сфера остаётся видимой,
+    /// вторая истинна и сфера отсекается. Выбрана первая: она совпадает с
+    /// <see cref="Intersects(in BoundingSphere)"/>, документированным
+    /// эквивалентом пакетных методов, и она осторожна — объект с испорченными
+    /// данными лучше отрисовать, чем молча убрать.
+    /// </remarks>
+    /// <param name="plane">Плоскость отсечения.</param>
+    /// <param name="center">Центр сферы.</param>
+    /// <param name="radius">Радиус сферы.</param>
+    /// <returns><c>true</c>, если сфера пересекает пирамиду.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSphereVisible(in Plane3 plane, in Vector3 center, float radius)
-        => (plane.DistanceTo(center) + radius) >= -ContainmentTolerance;
+        => !((plane.DistanceTo(center) + radius) < -ContainmentTolerance);
+
+    /// <summary>
+    /// Та же проверка для раздельных массивов: координаты не собираются в
+    /// вектор, потому что в хвосте данные могут быть нечисловыми и собирать
+    /// из них <see cref="BoundingSphere"/> нельзя.
+    /// </summary>
+    /// <param name="plane">Плоскость отсечения.</param>
+    /// <param name="x">Координата X центра.</param>
+    /// <param name="y">Координата Y центра.</param>
+    /// <param name="z">Координата Z центра.</param>
+    /// <param name="radius">Радиус сферы.</param>
+    /// <returns><c>true</c>, если сфера пересекает пирамиду.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsSphereVisible(in Plane3 plane, float x, float y, float z, float radius)
+    {
+        Vector3 normal = plane.Normal;
+        float distance = (normal.X * x) + (normal.Y * y) + ((normal.Z * z) + plane.Distance);
+        return !((distance + radius) < -ContainmentTolerance);
+    }
 
     private static Plane3 FromRowSum(float x, float y, float z, float offset, string name)
     {

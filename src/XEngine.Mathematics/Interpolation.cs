@@ -244,13 +244,10 @@ public static class Interpolation
     /// <param name="min">Нижняя граница.</param>
     /// <param name="max">Верхняя граница.</param>
     /// <returns>Значение в диапазоне.</returns>
-    public static float Clamp(float value, float min, float max)
-    {
-        if (min > max)
-        {
-            throw new ArgumentException("Минимальная граница больше максимальной.", nameof(min));
-        }
-
-        return value < min ? min : value > max ? max : value;
-    }
+    /// <remarks>
+    /// Реализация общая с <see cref="Scalar.Clamp"/>: две одинаковые функции
+    /// под разными именами разъезжаются при правке, и вызывающий получает
+    /// разные сообщения об ошибке на одном и том же входе.
+    /// </remarks>
+    public static float Clamp(float value, float min, float max) => Scalar.Clamp(value, min, max);
 }

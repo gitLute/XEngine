@@ -62,8 +62,16 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// </summary>
     /// <param name="direction">Направляющий вектор.</param>
     /// <returns>Угол направления.</returns>
+    /// <remarks>
+    /// Проверяется только точный ноль, а не длина меньше
+    /// <see cref="Scalar.Epsilon"/>. Ненулевой вектор — это направление, и
+    /// оно нормализуется при любой длине, как требует общее правило библиотеки:
+    /// порог на длину превращал в ноль настоящие направления. Например,
+    /// направление длиной 1.4e-7 метра — это нормаль физического тела,
+    /// посчитанная на грани, и его угол обязан быть 45°, а не нулём.
+    /// </remarks>
     public static Angle FromDirection(Vector2 direction)
-        => MathF.Abs(direction.X) < Scalar.Epsilon && MathF.Abs(direction.Y) < Scalar.Epsilon
+        => direction == Vector2.Zero
             ? Zero
             // MathF.Atan2 уже возвращает значение в (-π; π], то есть ровно в том
             // диапазоне, в котором угол нормализован, поэтому нормализация
@@ -241,8 +249,18 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="target">Целевой угол.</param>
     /// <param name="maxDelta">Максимальный шаг в радианах.</param>
     /// <returns>Новый угол.</returns>
+    /// <remarks>
+    /// Неположительный шаг возвращает текущий угол. Иначе движение пошло бы
+    /// в сторону, противоположную цели, то есть шаг в минус означал бы шаг
+    /// назад: знак у <paramref name="maxDelta"/> вдруг задавал бы направление.
+    /// </remarks>
     public static Angle MoveTowards(Angle current, Angle target, double maxDelta)
     {
+        if (maxDelta <= 0.0)
+        {
+            return current;
+        }
+
         double delta = ShortestDelta(current, target);
         return Math.Abs(delta) <= maxDelta ? target : current.Add(Angle.FromRadiansRaw(Math.Sign(delta) * maxDelta));
     }
