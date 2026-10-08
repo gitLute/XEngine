@@ -7,11 +7,11 @@ namespace XEngine.Mathematics.Tests;
 public sealed class VectorAndMatrixTests
 {
     [Fact]
-    public void RotateDirection_PreservesLengthAndTakesNewAngle()
+    public void WithDirection_PreservesLengthAndTakesNewAngle()
     {
         Vector2 source = new Vector2(2f, 0f);
 
-        Vector2 result = VectorExtensions.RotateDirection(source, Angle.FromDegrees(90));
+        Vector2 result = VectorExtensions.WithDirection(source, Angle.FromDegrees(90));
 
         Assert.Equal(2f, result.Length(), 1e-5f);
         Assert.Equal(0f, result.X, 1e-5f);

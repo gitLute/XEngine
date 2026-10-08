@@ -183,7 +183,7 @@ public class ScalarAndGuardTests
         MathAssert.Equal(quarter.Rotate(vector), vector.Rotate(quarter), 1e-4f);
 
         // Назначение направления расширением.
-        Vector2 rotated = vector.RotateDirection(quarter);
+        Vector2 rotated = vector.WithDirection(quarter);
         MathAssert.Equal(quarter.Direction * vector.Length(), rotated, 1e-4f);
 
         // Линейная интерполяция расширением и через System.Numerics.

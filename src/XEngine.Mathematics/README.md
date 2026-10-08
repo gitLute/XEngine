@@ -22,7 +22,7 @@
 | `Angle.cs` | угол с нормализацией в `(−π; π]`, интерполяция по кратчайшей дуге, поворот вектора, `MoveTowards` |
 | `Trig.cs` | фасад трансцендентных функций: два варианта сборки выбираются компиляцией |
 | `DeterministicMath.cs` | многочлены вместо `MathF`, когда нужна побитовая воспроизводимость |
-| `VectorExtensions.cs` | операции поверх `Vector2`: `FromPolar`, `Rotate`, `RotateDirection`, `Perpendicular`, `ToAngle`, `SafeNormalize`, `Project`, `MoveTowards` |
+| `VectorExtensions.cs` | операции поверх `Vector2`: `FromPolar`, `Rotate`, `WithDirection`, `Perpendicular`, `ToAngle`, `SafeNormalize`, `Project`, `MoveTowards` |
 | `Vector3Extensions.cs` | операции поверх `Vector3`: `RotateAround`, `ToAngle`, `SignedAngleAround`, `Perpendicular`, `FromSpherical`, проекции на плоскость |
 | `Matrix3x2Extensions.cs` | `CreateTransform` (позиция, угол, масштаб, опорная точка), разбор матрицы, `TryInvert`, `ToMatrix4x4` |
 | `Matrix4x4Extensions.cs` | `CreateTRS`, `CreateLookAt`, перспективная и ортографическая проекции с диапазоном `[-1; 1]`, `TryInvert`, разбор `GetScale`/`GetRotation`/`GetTranslation`, `MultiplyPoint`, `MultiplyVector`, `TransformNormal` |

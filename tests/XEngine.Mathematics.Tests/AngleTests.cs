@@ -157,12 +157,43 @@ public sealed class AngleTests
         Assert.Equal(1, result.Degrees, 1e-9);
     }
 
+    /// <summary>
+    /// Умножение приводит результат к диапазону, а сырое — нет.
+    /// </summary>
+    /// <remarks>
+    /// Раньше <c>Scale</c> нормализации не выполнял, и инвариант класса
+    /// «углы в (−π; π]» держался на честном слове: сравнение, хеш и
+    /// упорядочивание идут по сырым радианам, поэтому 360° не равны 0° и хеши
+    /// у них разные. Дальше <c>Angle.SinCos</c> сужает радианы до <c>float</c>,
+    /// так что на большой накопленной величине точность падает независимо от
+    /// того, в <c>double</c> она хранится или нет.
+    /// </remarks>
     [Fact]
-    public void Scale_DoesNotNormalize()
+    public void Scale_Normalizes_AndRawDoesNot()
     {
-        Angle scaled = Angle.FromDegrees(90).Scale(4f);
+        MathAssert.Equal(0f, (float)Angle.FromDegrees(90).Scale(4f).Degrees, 1e-5f);
 
-        Assert.Equal(360, scaled.Radians * 180.0 / Math.PI, 1e-9);
+        // Тот же угол два числа спустя обязан совпадать с нулём по всем трём
+        // признакам, а не только по величине.
+        Angle wrapped = Angle.FromDegrees(90).Scale(4f);
+        Assert.True(wrapped == Angle.FromDegrees(0), "360° должны совпадать с 0°.");
+        Assert.True(
+            wrapped.GetHashCode() == Angle.FromDegrees(0).GetHashCode(),
+            "Хеши различаются: ключ в словаре даст две записи на одну ориентацию.");
+
+        // Сырой путь сохранён и честно выходит за полный оборот.
+        MathAssert.Equal(360f, (float)Angle.FromDegrees(90).ScaleRaw(4f).Degrees, 1e-3f);
+        MathAssert.Equal(180f, (float)Angle.FromDegrees(90).Scale(2f).Degrees, 1e-4f);
+        // −π приводится к +π: диапазон задан как (−π; π], а не [−π; π].
+        MathAssert.Equal(180f, (float)Angle.FromDegrees(90).Scale(-2f).Degrees, 1e-4f);
+        MathAssert.Equal(-90f, (float)Angle.FromDegrees(90).Scale(-1f).Degrees, 1e-4f);
+
+        // Оператор умножения обязан вести себя так же, как Scale: он на него и
+        // ссылается, иначе инвариант снова окажется дырявым.
+        Assert.True(Angle.FromDegrees(90) * 4f == Angle.FromDegrees(0), "operator * нормализует через Scale.");
+
+        // Деление уже нормализовало, и на этом основании Scale тоже должен.
+        Assert.True(Angle.FromDegrees(90) / 4f == Angle.FromDegrees(22.5), "Деление не изменилось.");
     }
 
     [Fact]

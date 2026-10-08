@@ -33,12 +33,19 @@ public static class VectorExtensions
     /// <param name="angle">Целевое направление.</param>
     /// <returns>Вектор той же длины под заданным углом.</returns>
     /// <remarks>
-    /// Не путать с <see cref="Angle.RotateDirection"/>, который именно
-    /// поворачивает направление, и с <c>Angle.Rotate</c>, который поворачивает
-    /// вектор целиком, сохраняя длину. Совпадения результатов на отдельных
-    /// входах случайны.
+    /// Метод не поворачивает, а задаёт направление, поэтому и назван
+    /// <c>WithDirection</c>. Прежнее имя совпадало с
+    /// <see cref="Angle.RotateDirection"/>, который действительно поворачивает,
+    /// и вызывающий выбирал по имени: <c>RotateDirection((0, 1), 90°)</c>
+    /// возвращает <c>(0, 1)</c>, а не <c>(-1, 0)</c>.
+    /// <para>
+    /// Отличать от <see cref="Rotate"/>, который поворачивает вектор целиком и
+    /// сохраняет длину, и от <see cref="Angle.RotateDirection"/>, который
+    /// поворачивает направление и теряет длину. Совпадения результатов на
+    /// отдельных входах случайны.
+    /// </para>
     /// </remarks>
-    public static Vector2 RotateDirection(this Vector2 vector, Angle angle)
+    public static Vector2 WithDirection(this Vector2 vector, Angle angle)
         => angle.Direction * vector.Length();
 
     /// <summary>

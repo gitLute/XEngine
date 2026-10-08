@@ -359,4 +359,103 @@ public class ContractConsistencyTests
         MathAssert.Equal(-50f, Interpolation.RemapUnclamped(-5f, 0f, 10f, 0f, 100f), 1e-4f);
         MathAssert.Equal(150f, Interpolation.RemapUnclamped(15f, 0f, 10f, 0f, 100f), 1e-4f);
     }
+
+    /// <summary>
+    /// Вердикт пересечения не зависит от длины отрезка, если его прямая и
+    /// положение не меняются.
+    /// </summary>
+    /// <remarks>
+    /// Порог параллельности сравнивал векторное произведение направления на
+    /// отрезок с <c>Scalar.Epsilon</c>. Произведение равно
+    /// <c>|направление|·|отрезок|·sin угла</c>, то есть произведение длины на
+    /// синус: критерий отвечал на вопрос о длине, а спрашивался угол. Отрезок
+    /// длиной 1 мм объявлял параллельным луч, отклонённый на 0.057 градуса, а
+    /// отрезок длиной 1000 метров — только на 5.7e-8 радиана.
+    /// <para>
+    /// Проверяется не «было неверно, стало верно», а само свойство: при трёх
+    /// длинах вердикт обязан совпадать. Расхождение прежнего критерия с
+    /// <see cref="Collision.SegmentSegmentDistance"/>, который отвечает на тот же
+    /// вопрос углом, уводило к разным ответам в пограничной полосе, и это
+    /// расхождение внутри библиотеки опаснее, чем абсолютный порог.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Ray2SegmentHit_DoesNotDependOnSegmentLength()
+    {
+        Ray2 ray = new(Vector2.Zero, Vector2.UnitX);
+
+        // Прямая отрезка фиксирована и параллельна лучу, отрезок скользит по
+        // ней. Истина от длины не зависит, поэтому не должна зависеть и вердикт.
+        foreach (float lateral in new[] { 0f, 1e-7f, 1e-5f, 0.5f, 3f })
+        {
+            bool[] verdicts = new bool[3];
+            float[] lengths = [1e-4f, 1e-2f, 1f];
+            for (int i = 0; i < lengths.Length; i++)
+            {
+                Segment2 segment = new(
+                    new Vector2(5f, lateral),
+                    new Vector2(5f + lengths[i], lateral));
+                verdicts[i] = ray.Intersects(segment);
+            }
+
+            Assert.True(
+                verdicts[0] == verdicts[1] && verdicts[1] == verdicts[2],
+                $"Боковое смещение {lateral}: вердикт зависит от длины отрезка — {verdicts[0]}, {verdicts[1]}, {verdicts[2]}.");
+
+            // Опорные случаи, а не ожидание для каждого смещения: луч лежит на
+            // прямой отрезка и проходит от неё на боковое расстояние lateral.
+            // При lateral = 0 это попадание, при lateral = 0.5 это заведомый
+            // промах в полмиллитра. Промежуточные значения вроде 1e-5 лежат
+            // в пограничной полосе, где решает округление, и вердикт для них по
+            // контракту не определён — утверждать его нельзя.
+            if (lateral == 0f)
+            {
+                Assert.True(verdicts[0], "Отрезок, лежащий на луче, не признан пересекающим его.");
+            }
+            else if (lateral == 0.5f || lateral == 3f)
+            {
+                Assert.False(verdicts[0], $"Отрезок в {lateral} м от луча признан пересекающим его.");
+            }
+        }
+
+        // Прямая отрезка не параллельна лучу, и положение выбрано так, чтобы
+        // пересечения не было ни при какой длине.
+        foreach (float degrees in new[] { 5f, 30f, 90f })
+        {
+            (float sin, float cos) = MathF.SinCos(MathF.PI / 180f * degrees);
+            Vector2 along = new(cos, sin);
+            Vector2 across = new(-sin, cos);
+
+            bool[] verdicts = new bool[3];
+            float[] lengths = [1e-4f, 1e-2f, 1f];
+            for (int i = 0; i < lengths.Length; i++)
+            {
+                verdicts[i] = ray.Intersects(new Segment2(along * 5f + across * 3f, along * (5f + lengths[i]) + across * 3f));
+            }
+
+            Assert.True(
+                !verdicts[0] && !verdicts[1] && !verdicts[2],
+                $"Отклонение {degrees}°: вердикт зависит от длины — {verdicts[0]}, {verdicts[1]}, {verdicts[2]}.");
+        }
+
+        // Различающий случай: короткий отрезок под углом к лучу, у которого
+        // начало смещено от прямой луча меньше, чем Scalar.Epsilon.
+        //
+        // Прежний критерий объявлял такой отрезок параллельным: произведение
+        // |направление|·|отрезок|·sin угла при длине 2e-6 и угле 30 градусов
+        // равно ровно 1e-6, то есть порогу. Дальше ветка «параллельны»
+        // проверяла коллинеарность по точке начала и видела, что начало лежит
+        // на прямой луча с точностью до эпсилон, и возвращала попадание. Луч при
+        // этом ни разу не касался отрезка: тот целиком лежит выше прямой луча, и
+        // пересечение его прямой находится позади начала отрезка.
+        (float sin30, float cos30) = MathF.SinCos(MathF.PI / 6f);
+        const float Lateral = 1e-7f;
+        Segment2 shortSlanted = new(
+            new Vector2(5f, Lateral),
+            new Vector2(5f + (2e-6f * cos30), Lateral + (2e-6f * sin30)));
+
+        Assert.False(
+            ray.Intersects(shortSlanted),
+            "Короткий отрезок под углом, целиком лежащий выше прямой луча, признан пересекающим луч.");
+    }
 }
