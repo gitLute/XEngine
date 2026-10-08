@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Общие флаги заданы в Directory.Build.props (17.5).
+
+    Слой 2 (5.2): может ссылаться на слои 0-1, поэтому ссылка на
+    XEngine.Core законна. Внутри проекта живут и интерфейсы, и реализация на
+    Silk.NET: это внутренняя деталь проекта, а не межпроектная зависимость.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>XEngine.Windowing</RootNamespace>
+    <AssemblyName>XEngine.Windowing</AssemblyName>
+    <Description>Окно и цикл кадра XEngine: контракты окна и часов, реализация окна на Silk.NET, фиксированный шаг и цикл кадра.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\XEngine.Core\XEngine.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.Windowing" Version="$(SilkNetVersion)" />
+  </ItemGroup>
+
+</Project>

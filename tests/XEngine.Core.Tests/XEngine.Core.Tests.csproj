@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Тесты ядра: конфигурация и логирование. Содержимое проекта описано в
+    плане миграции как «этапы 5-8: ECS, трансформы, сцены, реестры, префабы»,
+    но конфигурация и лог появляются раньше (этап 3): ими пользуется окно.
+    Флаги тестов, версии xUnit заданы в tests/Directory.Build.props.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>XEngine.Core.Tests</RootNamespace>
+    <AssemblyName>XEngine.Core.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XEngine.Core\XEngine.Core.csproj" />
+  </ItemGroup>
+
+</Project>

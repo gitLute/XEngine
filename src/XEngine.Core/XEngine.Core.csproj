@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Общие флаги (TargetFramework, Nullable, TreatWarningsAsErrors, анализаторы,
+    XML-документация) заданы в Directory.Build.props и здесь не повторяются,
+    чтобы не было двух источников истины (17.5).
+
+    Слой 1 (5.2): может ссылаться только на слой 0. Пока нужен угол и вектор —
+    ссылка появится вместе с ними, а не про запас.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>XEngine.Core</RootNamespace>
+    <AssemblyName>XEngine.Core</AssemblyName>
+    <Description>Ядро XEngine: конфигурация, логирование, время, ECS, сцены, реестры, дескрипторы ресурсов и трансформы.</Description>
+  </PropertyGroup>
+
+</Project>

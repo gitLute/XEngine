@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Тесты окна и цикла (17.6): фиксированный шаг, часы, цикл кадра целиком.
+    Окно настоящее не требуется - оно подменяется заглушкой, а настоящий
+    бэкенд проверяется отдельным тестом, который запускается вручную.
+    Флаги тестов, версии xUnit заданы в tests/Directory.Build.props.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>XEngine.Windowing.Tests</RootNamespace>
+    <AssemblyName>XEngine.Windowing.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XEngine.Windowing\XEngine.Windowing.csproj" />
+    <ProjectReference Include="..\..\src\XEngine.Core\XEngine.Core.csproj" />
+  </ItemGroup>
+
+</Project>
