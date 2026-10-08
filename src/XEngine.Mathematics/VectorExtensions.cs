@@ -121,8 +121,25 @@ public static class VectorExtensions
     /// <param name="to">Целевая позиция.</param>
     /// <param name="maxStep">Максимальная длина шага.</param>
     /// <returns>Вектор смещения, который не перескакивает цель.</returns>
+    /// <remarks>
+    /// Неположительный шаг даёт нулевой вектор смещения, то есть «не двигаться».
+    /// Без проверки квадрат шага оставался положительным, проверка «не перескакиваем»
+    /// проходила, а деление шло с отрицательным множителем и вектор разворачивался:
+    /// <c>MoveTowards((0, 0), (10, 0), −5)</c> возвращал <c>(−5, −0)</c>, то есть
+    /// движение шло от цели. Защита такая же, как в <c>ClampLength</c> и в
+    /// <see cref="Angle.MoveTowards"/>, и по той же причине.
+    /// <para>
+    /// Метод возвращает смещение, а не позицию, поэтому «не двигаться» — это ноль.
+    /// <c>NaN</c> проверку не проходит и уходит в вычисление, то есть даёт <c>NaN</c>.
+    /// </para>
+    /// </remarks>
     public static Vector2 MoveTowards(this Vector2 from, Vector2 to, float maxStep)
     {
+        if (maxStep <= 0f)
+        {
+            return Vector2.Zero;
+        }
+
         Vector2 delta = to - from;
         float lengthSquared = delta.LengthSquared();
         return lengthSquared <= maxStep * maxStep || lengthSquared <= Scalar.Epsilon * Scalar.Epsilon
@@ -144,10 +161,68 @@ public static class VectorExtensions
     /// </summary>
     /// <param name="point">Проверяемая точка.</param>
     /// <param name="lineOrigin">Точка на прямой.</param>
-    /// <param name="lineNormal">Нормаль прямой, направленная в сторону положительной стороны.</param>
-    /// <returns>Знаковое расстояние.</returns>
-    public static float SignedDistanceToLine(this Vector2 point, Vector2 lineOrigin, Vector2 lineNormal)
+    /// <param name="lineNormal">
+    /// Нормаль прямой любой длины, направленная в сторону положительной стороны.
+    /// </param>
+    /// <returns>
+    /// Знаковое расстояние в единицах, в которых длина нормали равна единице, то
+    /// есть расстояние, умноженное на <c>length(lineNormal)</c>.
+    /// </returns>
+    /// <remarks>
+    /// Имя выбрано по смыслу, который был у метода на самом деле. Прежнее имя
+    /// обещало расстояние, а возвращало скалярное произведение: нормаль (3, 0)
+    /// давала 3 вместо 1, то есть величина отличалась от расстояния в
+    /// <c>length(lineNormal)</c> раз. Это ровно тот класс, который библиотека
+    /// уже признала и исправила: <c>RotateDirection</c> был переименован в
+    /// <c>WithDirection</c>, потому что имя обещало больше, чем делал, и вызывающий
+    /// выбирал по имени.
+    /// <para>
+    /// Нормализовать нормаль здесь означало бы молча изменить результат у всех
+    /// существующих вызовов в <c>length(lineNormal)</c> раз, а возвращаемый тип
+    /// <c>float</c> этого не показывает. Поэтому остаются два метода: этот,
+    /// дешёвый и точный для своего контракта, и
+    /// <see cref="SignedDistanceToLine"/>, возвращающий настоящее расстояние.
+    /// </para>
+    /// <para>
+    /// Метод уместен там, где нормали уже единичной длины: у нормали плоскости,
+    /// заданной углом, или у нормали, полученной как <c>line / |line|</c>. Тогда
+    /// результат совпадает с расстоянием, и нормировку делать не нужно.
+    /// </para>
+    /// </remarks>
+    public static float SignedLineOffset(this Vector2 point, Vector2 lineOrigin, Vector2 lineNormal)
         => Vector2.Dot(point - lineOrigin, lineNormal);
+
+    /// <summary>
+    /// Возвращает знаковое расстояние от точки до прямой в единицах длины.
+    /// </summary>
+    /// <param name="point">Проверяемая точка.</param>
+    /// <param name="lineOrigin">Точка на прямой.</param>
+    /// <param name="lineNormal">Нормаль прямой любой длины, нормализуется внутри.</param>
+    /// <returns>Знаковое расстояние до прямой.</returns>
+    /// <exception cref="ArgumentException">Нормаль нулевая.</exception>
+    /// <remarks>
+    /// Нормаль нормализуется, поэтому результат не зависит от того, единичная
+    /// она или нет: нормаль (3, 0) даёт 1, а не 3. Знак совпадает со знаком
+    /// скалярного произведения, то есть положительная сторона задаётся самой
+    /// нормалью.
+    /// <para>
+    /// Цена — одно вычисление длины и деление на каждом вызове. Если нормали
+    /// единичные, а это обычный случай у плоскостей, заданных углом, то
+    /// <see cref="SignedLineOffset"/> даёт тот же ответ дешевле, и разница между
+    /// методами становится чисто договорённостью о том, кто отвечает за длину
+    /// нормали.
+    /// </para>
+    /// </remarks>
+    public static float SignedDistanceToLine(this Vector2 point, Vector2 lineOrigin, Vector2 lineNormal)
+    {
+        Vector2 unit = lineNormal.SafeNormalize();
+        if (unit == Vector2.Zero)
+        {
+            throw new ArgumentException("Нормаль прямой должна быть ненулевой.", nameof(lineNormal));
+        }
+
+        return Vector2.Dot(point - lineOrigin, unit);
+    }
 
     /// <summary>
     /// Проверяет, лежит ли значение вектора в допуске от нуля по обеим компонентам.

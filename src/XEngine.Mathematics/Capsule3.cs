@@ -195,13 +195,12 @@ public readonly struct Capsule3 : IEquatable<Capsule3>
         out Vector3 closestA,
         out Vector3 closestB)
     {
-        // Два порога вместо одного: длина отрезка в квадрате измеряется в
-        // метрах², а denominator — произведение квадратов длин, то есть
-        // площадь в метрах⁴. Один порог для величин разной размерности
-        // означал бы, что параллельные отрезки произвольной длины
-        // обрабатываются вырожденными.
+        // Два порога, разделённые по размерности: длина отрезка в квадрате
+        // измеряется в метрах², а denominator — произведение квадратов длин,
+        // то есть площадь в метрах⁴. Порог «вырождена длина» остаётся
+        // абсолютным и это оправданно: у отрезка короче микрона во float нет
+        // различимой внутренности.
         const float DegenerateLengthSquared = 1e-12f;
-        const float DegenerateDenominator = 1e-18f;
 
         Vector3 first = endA - startA;
         Vector3 second = endB - startB;
@@ -236,8 +235,21 @@ public readonly struct Capsule3 : IEquatable<Capsule3>
         }
 
         float mixed = Vector3.Dot(first, second);
-        float denominator = lengthSquaredFirst * lengthSquaredSecond - mixed * mixed;
-        float parameterFirst = MathF.Abs(denominator) > DegenerateDenominator
+
+        // Знаменатель a·e − b² равен |d1|²|d2|²sin²θ, то есть произведение
+        // квадратов длин на квадрат синуса угла. Абсолютный порог здесь был
+        // признан дефектом и заменён на относительный: при 1e-18 на метрах⁴
+        // отрезки длиной 1e-4 м считались параллельными уже под углом 0.1
+        // рада, то есть результат зависел от масштаба мира. Порог задан
+        // относительно того же произведения и по существу проверяет
+        // sin²θ > Epsilon, то есть от масштаба не зависит — ровно тот же
+        // критерий, что и в Collision.SegmentSegmentDistance.
+        //
+        // Модуль не берётся: знаменатель неотрицателен по неравенству
+        // Коши, а округлением может стать слегка отрицательным, и модуль
+        // провёл бы деление на почти нулевой знаменатель.
+        float denominator = (lengthSquaredFirst * lengthSquaredSecond) - (mixed * mixed);
+        float parameterFirst = denominator > Scalar.Epsilon * lengthSquaredFirst * lengthSquaredSecond
             ? Scalar.Clamp((mixed * alongSecond - lengthSquaredSecond * alongFirst) / denominator, 0f, 1f)
             : 0f;
 

@@ -85,8 +85,27 @@ public static class Interpolation
     /// <param name="target">Целевое значение.</param>
     /// <param name="maxStep">Максимальный шаг.</param>
     /// <returns>Новое значение, не перескакивающее цель.</returns>
+    /// <remarks>
+    /// Неположительный шаг возвращает текущее значение. Без этой проверки
+    /// квадрат шага оставался положительным, проверка «не перескакиваем»
+    /// проходила, а деление шло с отрицательным множителем: <c>MoveTowards(0, 10, −5)</c>
+    /// давал <c>−5</c>, то есть движение уходило от цели. Защита такая же, как в
+    /// <see cref="Angle.MoveTowards"/>, и по той же причине: знак у шага не должен
+    /// задавать направление. Там она ещё и объяснена в доктрине, а здесь молчала.
+    /// <para>
+    /// <c>NaN</c> проверку не проходит и уходит в вычисление, то есть даёт
+    /// <c>NaN</c>. Это осознанно и одинаково во всех методах <c>MoveTowards</c>:
+    /// нечисловой шаг — ошибка вызывающего, которая должна быть видна сразу, а не
+    /// заменяться молчаливым нулём.
+    /// </para>
+    /// </remarks>
     public static float MoveTowards(float current, float target, float maxStep)
     {
+        if (maxStep <= 0f)
+        {
+            return current;
+        }
+
         float delta = target - current;
         return MathF.Abs(delta) <= maxStep ? target : current + MathF.Sign(delta) * maxStep;
     }
@@ -192,6 +211,39 @@ public static class Interpolation
     /// <param name="length">Период. Должен быть больше нуля.</param>
     /// <returns>Значение в диапазоне 0..<paramref name="length"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Период меньше или равен нулю.</exception>
+    /// <remarks>
+    /// Вычисление идёт в <see cref="double"/>, а округляется один раз, при
+    /// возврате. В <c>float</c> произведение <c>Floor(value / length) * length</c>
+    /// округлялось обратно на <paramref name="value"/>, и разность давала ровно ноль
+    /// начиная с отношения около 2²³: <c>Repeat(1e8, 7)</c> возвращал 0 вместо 2,
+    /// а <c>Repeat(0.3, 1e-9)</c> — 0 вместо 4.06e-10.
+    /// <para>
+    /// Диапазон расширен, но не во все стороны, и граница измерена. Пока отношение
+    /// <paramref name="value"/> к <paramref name="length"/> не больше 1e8, результат
+    /// совпадает с точным остатком побитово; прежний путь давал точный остаток
+    /// примерно до 2²³, то есть расширение в 12 раз. Дальше точность падает
+    /// линейно по отношению, потому что остаток получается вычитанием двух чисел
+    /// величиной <paramref name="value"/>: измерено 5.0e-5 на отношении 1e9,
+    /// 4.2e-3 на 1e10 и полный промах на 1e14.
+    /// </para>
+    /// <para>
+    /// Главное здесь не расширение, а смена характера ошибки. Прежний путь в этой
+    /// области не терял точность, а возвращал полный ноль — то есть фаза анимации
+    /// и координаты текстуры сбрасывались, и это видно глазом. Теперь вместо нуля
+    /// получается приближение, а на расстоянии от цели появляется полоса точности.
+    /// Произвольная точность дала бы остаток при любом отношении, но она здесь
+    /// неуместна: остаток от деления в игровом цикле нужен для фазы анимации и
+    /// координат текстуры, где отношение величин больше 1e8 не встречается.
+    /// </para>
+    /// <para>
+    /// Результат принудительно попадает в <c>[0; length]</c>: округление на верхней
+    /// границе может дать ровно <paramref name="length"/>, а это тот же остаток,
+    /// что и ноль. Договорённость о диапазоне важнее точности в одной точке.
+    /// Заодно это снимает <c>−∞</c> в ответе: при длине порядка 1e-30 отношение
+    /// <paramref name="value"/> к <paramref name="length"/> переполнялось, и
+    /// <c>Floor</c> давал бесконечность.
+    /// </para>
+    /// </remarks>
     public static float Repeat(float value, float length)
     {
         if (length <= 0f)
@@ -199,7 +251,19 @@ public static class Interpolation
             throw new ArgumentOutOfRangeException(nameof(length), length, "Период должен быть больше нуля.");
         }
 
-        return value - MathF.Floor(value / length) * length;
+        double remainder = value - (Math.Floor(value / (double)length) * length);
+
+        // Нижняя граница нужна из-за знакового нуля: у отрицательного значения
+        // и крошечного периода остаток может выйти в минус на величину
+        // последнего разряда, и -0 ушёл бы в дальнейшие вычисления как число.
+        if (remainder <= 0.0)
+        {
+            return 0f;
+        }
+
+        // length соответствует самому себе, то есть его представитель в
+        // полуинтервале — ноль, а не сам period.
+        return remainder >= (double)length ? 0f : (float)remainder;
     }
 
     /// <summary>
@@ -215,6 +279,15 @@ public static class Interpolation
     /// <param name="value">Исходное значение.</param>
     /// <param name="length">Половина периода.</param>
     /// <returns>Значение в диапазоне 0..1.</returns>
+    /// <remarks>
+    /// Деление на <c>2 * length</c> считается в <see cref="double"/>, по той же
+    /// причине, что и остаток в <see cref="Repeat"/>. В <c>float</c> это деление
+    /// отбрасывало дробную часть раньше, чем она доходила до остатка: при
+    /// величине порядка 1e7 в <c>float</c> нет разряда меньше единицы, то есть
+    /// <c>PingPong(1e8, 3)</c> давал ровно ноль, тогда как верный ответ около
+    /// 0.667. Правки одного остатка здесь было бы недостаточно, и доктрина
+    /// «наследует исправление» была бы неверной.
+    /// </remarks>
     public static float PingPong(float value, float length)
     {
         if (length <= 0f)
@@ -222,8 +295,9 @@ public static class Interpolation
             throw new ArgumentOutOfRangeException(nameof(length), length, "Период должен быть больше нуля.");
         }
 
-        float t = Repeat01(value / (2f * length));
-        return 1f - MathF.Abs(t * 2f - 1f);
+        double phase = (double)value / ((double)length * 2.0);
+        phase -= Math.Floor(phase);
+        return (float)(1.0 - Math.Abs((phase * 2.0) - 1.0));
     }
 
     /// <summary>

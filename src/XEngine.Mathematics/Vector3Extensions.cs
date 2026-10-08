@@ -112,8 +112,26 @@ public static class Vector3Extensions
     /// <param name="to">Целевая позиция.</param>
     /// <param name="maxStep">Максимальная длина шага.</param>
     /// <returns>Вектор смещения, который не перескакивает цель.</returns>
+    /// <remarks>
+    /// Неположительный шаг даёт нулевой вектор смещения, то есть «не двигаться».
+    /// Без проверки квадрат шага оставался положительным, проверка «не перескакиваем»
+    /// проходила, а деление шло с отрицательным множителем и вектор разворачивался:
+    /// <c>MoveTowards((0, 0, 0), (10, 0, 0), −5)</c> возвращал <c>(−5, −0, −0)</c>,
+    /// то есть движение шло от цели. Защита такая же, как в
+    /// <see cref="VectorExtensions.MoveTowards"/> и в <see cref="Angle.MoveTowards"/>,
+    /// и по той же причине.
+    /// <para>
+    /// Метод возвращает смещение, а не позицию, поэтому «не двигаться» — это ноль.
+    /// <c>NaN</c> проверку не проходит и уходит в вычисление, то есть даёт <c>NaN</c>.
+    /// </para>
+    /// </remarks>
     public static Vector3 MoveTowards(this Vector3 from, Vector3 to, float maxStep)
     {
+        if (maxStep <= 0f)
+        {
+            return Vector3.Zero;
+        }
+
         Vector3 delta = to - from;
         float lengthSquared = delta.LengthSquared();
         return lengthSquared <= maxStep * maxStep || lengthSquared <= Scalar.Epsilon * Scalar.Epsilon

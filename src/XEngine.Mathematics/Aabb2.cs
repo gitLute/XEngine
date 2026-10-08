@@ -13,10 +13,28 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// </summary>
     /// <param name="min">Минимальная точка.</param>
     /// <param name="max">Максимальная точка.</param>
+    /// <exception cref="ArgumentException">Границы переставлены по любой оси.</exception>
+    /// <remarks>
+    /// Границы проверяются, а не переставляются, ровно как в
+    /// <see cref="Aabb3"/>. Молчаливая перестановка означала, что два
+    /// аналогичных типа отвечали на один вход по-разному: <c>Aabb2(min &gt; max)</c>
+    /// принимал, а <c>Aabb3(min &gt; max)</c> бросал. Кроме того, перестановка
+    /// делала результат невидимым: вызывающий задавал <c>min</c> и <c>max</c>,
+    /// получал коробку и не знал, что границы вверх ногами.
+    /// <para>
+    /// Пустое значение собирается не через этот конструктор, а отдельно, через
+    /// <see cref="Empty"/> с намеренно переставленными границами.
+    /// </para>
+    /// </remarks>
     public Aabb2(Vector2 min, Vector2 max)
     {
-        Min = Vector2.Min(min, max);
-        Max = Vector2.Max(min, max);
+        if (min.X > max.X || min.Y > max.Y)
+        {
+            throw new ArgumentException("Минимальные границы должны быть не больше максимальных.", nameof(min));
+        }
+
+        Min = min;
+        Max = max;
     }
 
     private Aabb2(Vector2 min, Vector2 max, EmptyMarker marker)
@@ -38,6 +56,7 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// <param name="center">Центр.</param>
     /// <param name="halfSize">Половина размера по каждой оси.</param>
     /// <returns>AABB.</returns>
+    /// <exception cref="ArgumentException">Половина размера отрицательна.</exception>
     public static Aabb2 FromCenterAndHalfSize(Vector2 center, Vector2 halfSize)
         => new(center - halfSize, center + halfSize);
 
@@ -46,8 +65,9 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// </summary>
     /// <param name="center">Центр.</param>
     /// <param name="size">Полный размер.</param>
+    /// <exception cref="ArgumentException">Размер отрицателен.</exception>
     public static Aabb2 FromCenterAndSize(Vector2 center, Vector2 size)
-        => new(center - size * 0.5f, center + size * 0.5f);
+        => new(center - (size * 0.5f), center + (size * 0.5f));
 
     /// <summary>
     /// Создаёт AABB из списка точек.
@@ -78,7 +98,18 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// </summary>
     /// <param name="rect">Прямоугольник.</param>
     /// <returns>AABB.</returns>
-    public static Aabb2 FromRect(Rect rect) => new(rect.Position, rect.Position + rect.Size);
+    /// <remarks>
+    /// Углы упорядочиваются здесь, а не конструктором: <see cref="Rect"/> допускает
+    /// отрицательный размер, о чём говорят его <c>Left</c>, <c>Top</c>,
+    /// <c>Right</c> и <c>Bottom</c> — они нормализуют порядок сами. Прямоугольник с
+    /// отрицательным размером задаёт ту же область, что и с положительным, и
+    /// отвергать его на входе в фабрике незачем.
+    /// </remarks>
+    public static Aabb2 FromRect(Rect rect)
+    {
+        Vector2 corner = rect.Position + rect.Size;
+        return new(Vector2.Min(rect.Position, corner), Vector2.Max(rect.Position, corner));
+    }
 
     /// <summary>
     /// Пустой AABB, не содержащий ни одной точки.
@@ -114,7 +145,13 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// <summary>
     /// Центр AABB.
     /// </summary>
-    public Vector2 Center => (Min + Max) * 0.5f;
+    /// <remarks>
+    /// У пустого AABB границы переставлены, поэтому сумма <c>Min + Max</c> даёт
+    /// <c>NaN</c>. Для него возвращается нулевой центр, ровно как в
+    /// <see cref="Aabb3.Center"/>: <c>NaN</c> в центре не даёт вызывающому никакого
+    /// решения, а центр пустого значения всё равно не имеет смысла.
+    /// </remarks>
+    public Vector2 Center => IsEmpty ? Vector2.Zero : (Min + Max) * 0.5f;
 
     /// <summary>
     /// Признак пустого AABB: параллелепипед переставлен хотя бы по одной оси.
@@ -149,8 +186,16 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// </summary>
     /// <param name="other">Другой AABB.</param>
     /// <returns><c>true</c>, если текущий AABB содержит другой.</returns>
+    /// <remarks>
+    /// Пустой AABB не содержится ни в чём, включая другой пустой. Без проверки его
+    /// переставленные границы удовлетворяли бы сравнениям <c>+inf &gt;= Min</c> и
+    /// <c>−inf &lt;= Max</c> в любом контейнере, то есть пустой бокс считался бы
+    /// содержащимся в пустом. <see cref="Aabb3.Contains(in Aabb3)"/> отвечает так же.
+    /// </remarks>
     public bool Contains(Aabb2 other)
-        => other.Min.X >= Min.X && other.Max.X <= Max.X && other.Min.Y >= Min.Y && other.Max.Y <= Max.Y;
+        => !other.IsEmpty && !IsEmpty
+            && other.Min.X >= Min.X && other.Max.X <= Max.X
+            && other.Min.Y >= Min.Y && other.Max.Y <= Max.Y;
 
     /// <summary>
     /// Возвращает объединение двух AABB.
@@ -179,12 +224,13 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// <returns>Расширённый AABB.</returns>
     /// <remarks>
     /// Отступ, превышающий половину размера по какой-либо оси, схлопывает AABB
-    /// в точку на этой оси, а не переворачивает его: конструктор нормализует
-    /// границы, поэтому наивный min/max из пересекшихся границ дал бы бокс
-    /// больше исходного. Ведёт себя так же, как <see cref="Aabb3.Expand"/>.
+    /// в точку на этой оси, а не переворачивает его: наивные min/max из
+    /// пересекшихся границ дали бы бокс больше исходного. Схлопывание идёт в
+    /// центр, и формула совпадает с <see cref="Aabb3.Expand"/> построением, а не
+    /// результатом: два типа обязаны вести себя одинаково.
     /// <para>
-    /// Пустой AABB остаётся пустым. Без этой проверки его центр равен NaN,
-    /// потому что границы переставлены, и результат содержал бы NaN в обеих
+    /// Пустой AABB остаётся пустым. Без этой проверки его центр был бы <c>NaN</c>,
+    /// потому что границы переставлены, и результат содержал бы <c>NaN</c> в обеих
     /// границах вместо пустого значения.
     /// </para>
     /// </remarks>
@@ -195,8 +241,12 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
             return this;
         }
 
+        // Схлопывание в центр не даёт границам пересечься, поэтому конструктор
+        // получает упорядоченные точки и проверку проходит.
         Vector2 center = (Min + Max) * 0.5f;
-        return new Aabb2(Vector2.Min(Min - amount, center), Vector2.Max(Max + amount, center));
+        return new Aabb2(
+            Vector2.Min(Min - amount, center),
+            Vector2.Max(Max + amount, center));
     }
 
     /// <summary>
@@ -204,14 +254,25 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// </summary>
     /// <param name="point">Исходная точка.</param>
     /// <returns>Ближайшая точка внутри AABB.</returns>
+    /// <remarks>
+    /// У пустого AABB границы переставлены, и ограничение по ним дало бы <c>−∞</c>,
+    /// от которого расстояние тоже бесконечно. Для него возвращается исходная точка,
+    /// и <see cref="DistanceTo"/> даёт ноль, ровно как в <see cref="Aabb3"/>.
+    /// </remarks>
     public Vector2 ClosestPoint(Vector2 point)
-        => Vector2.Clamp(point, Min, Max);
+        => IsEmpty ? point : Vector2.Clamp(point, Min, Max);
 
     /// <summary>
     /// Возвращает расстояние от точки до AABB (ноль, если точка внутри).
     /// </summary>
     /// <param name="point">Исходная точка.</param>
-    /// <returns>Расстояние до AABB.</returns>
+    /// <returns>Расстояние до AABB; ноль для пустого AABB.</returns>
+    /// <remarks>
+    /// Ноль для пустого AABB следует из <see cref="ClosestPoint"/> и совпадает с
+    /// <see cref="Aabb3.DistanceTo"/>. Отдельная оговорка не нужна: пустое
+    /// значение не содержит ни одной точки, поэтому расстояние до него как до
+    /// объёма определяется согласованно в обоих типах.
+    /// </remarks>
     public float DistanceTo(Vector2 point) => Vector2.Distance(ClosestPoint(point), point);
 
     /// <summary>

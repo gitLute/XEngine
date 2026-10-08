@@ -852,7 +852,1045 @@ public class DefectRegressionTests
         Assert.True(MathF.Abs(Vector3.Dot(unit, result)) < 1e-5f, "Результат не перпендикулярен.");
     }
 
-    /// <summary>Биты числа <c>+0</c>.</summary>
+    // ==================================================================
+    // P3-1. Три MoveTowards, и только один проверяет знак шага.
+    //
+    // Причина одна: maxStep * maxStep положителен и при отрицательном
+    // maxStep, поэтому проверка «не перескакиваем» проходит, а деление идёт
+    // с отрицательным множителем.
+
+    /// <summary>
+    /// P3-1: неположительный шаг не должен двигать значение от цели.
+    /// </summary>
+    /// <param name="step">Шаг.</param>
+    /// <remarks>
+    /// Дискриминирующий вход: при положительном шаге те же числа дают движение
+    /// к цели, то есть проверка не проходит по нечувствительности.
+    /// </remarks>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(-1f)]
+    [InlineData(-5f)]
+    [InlineData(-1e-7f)]
+    [InlineData(-1000f)]
+    public void Interpolation_MoveTowardsWithNonPositiveStepDoesNotMove(float step)
+    {
+        float result = Interpolation.MoveTowards(0f, 10f, step);
+
+        Assert.Equal(0f, result);
+        Assert.True(BitConverter.SingleToInt32Bits(result) != NegativeZeroBits, "Возвращён знаковый минус.");
+    }
+
+    /// <summary>
+    /// P3-1: страховка от переусердствования — положительный шаг двигает к цели.
+    /// </summary>
+    /// <param name="step">Шаг.</param>
+    [Theory]
+    [InlineData(1f, 1f)]
+    [InlineData(5f, 5f)]
+    [InlineData(10f, 10f)]
+    [InlineData(1000f, 10f)]
+    public void Interpolation_MoveTowardsWithPositiveStepStillMovesTowardTarget(float step, float expected)
+    {
+        float result = Interpolation.MoveTowards(0f, 10f, step);
+
+        Assert.Equal(expected, result);
+        Assert.True(StepRespected(0f, result, step), "Шаг превышен.");
+    }
+
+    /// <summary>
+    /// P3-1: векторный вариант не должен разворачивать смещение.
+    /// </summary>
+    /// <param name="step">Шаг.</param>
+    /// <remarks>
+    /// Возвращается смещение, а не позиция, поэтому «не двигаться» — это нулевой
+    /// вектор. Прежнее поведение давало <c>(−5, −0)</c>, то есть движение от цели
+    /// вместе с развёрнутым знаком нуля по неиспользуемой оси.
+    /// </remarks>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(-1f)]
+    [InlineData(-5f)]
+    [InlineData(-1e-7f)]
+    public void Vector2_MoveTowardsWithNonPositiveStepGivesZero(float step)
+    {
+        Vector2 result = Vector2.Zero.MoveTowards(new Vector2(10f, 0f), step);
+
+        Assert.Equal(Vector2.Zero, result);
+        Assert.Equal(0, BitConverter.SingleToInt32Bits(result.X));
+        Assert.Equal(0, BitConverter.SingleToInt32Bits(result.Y));
+    }
+
+    /// <summary>
+    /// P3-1: то же для трёх измерений.
+    /// </summary>
+    /// <param name="step">Шаг.</param>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(-1f)]
+    [InlineData(-5f)]
+    [InlineData(-1e-7f)]
+    public void Vector3_MoveTowardsWithNonPositiveStepGivesZero(float step)
+    {
+        Vector3 result = Vector3.Zero.MoveTowards(new Vector3(10f, 0f, 0f), step);
+
+        Assert.Equal(Vector3.Zero, result);
+        Assert.Equal(0, BitConverter.SingleToInt32Bits(result.Y));
+        Assert.Equal(0, BitConverter.SingleToInt32Bits(result.Z));
+    }
+
+    /// <summary>
+    /// P3-1: страховка — векторный шаг не превышается и не разворачивается.
+    /// </summary>
+    /// <param name="step">Шаг.</param>
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(5f)]
+    [InlineData(1e6f)]
+    public void Vector3_MoveTowardsWithPositiveStepStillMovesTowardTarget(float step)
+    {
+        Vector3 result = Vector3.Zero.MoveTowards(new Vector3(10f, 0f, 0f), step);
+
+        Assert.True(result.X > 0f, "Смещение направлено от цели.");
+        Assert.True(result.Length() <= step + 1e-3f, $"Длина смещения {result.Length()} превышает шаг {step}.");
+    }
+
+    /// <summary>
+    /// P3-1: неположительный шаг не проходит и через <c>NaN</c>-защиту — то есть
+    /// методы ведут себя одинаково на всех неположительных шагах.
+    /// </summary>
+    /// <remarks>
+    /// <c>NaN</c> проверку <c>maxStep &lt;= 0</c> не проходит, и это осознанно:
+    /// нечисловой шаг — ошибка вызывающего, которая должна быть видна, а не
+    /// заменяться молчаливым нулём. Проверка фиксирует именно эту договорённость,
+    /// чтобы её не «починили» вместе с чем-то ещё.
+    /// </remarks>
+    [Fact]
+    public void MoveTowards_NonFiniteStepIsNotSilentlyTurnedIntoZero()
+    {
+        Assert.True(float.IsNaN(Interpolation.MoveTowards(0f, 10f, float.NaN)));
+        Assert.True(float.IsNaN(Vector2.Zero.MoveTowards(new Vector2(10f, 0f), float.NaN).X));
+        Assert.True(float.IsNaN(Vector3.Zero.MoveTowards(new Vector3(10f, 0f, 0f), float.NaN).X));
+    }
+
+    // ==================================================================
+    // P3-2. Aabb2 не обрабатывает пустое значение, Aabb3 обрабатывает.
+
+    /// <summary>
+    /// P3-2: пустой <c>Aabb2</c> обязан вести себя как пустой <c>Aabb3</c>.
+    /// </summary>
+    /// <remarks>
+    /// Проверка идёт по обоим типам сразу, а не по ожидаемым значениям. Так она
+    /// не может разойтись с <c>Aabb3</c> снова: если правка одного из них
+    /// изменит смысл пустого значения, упадёт этот тест, а не новый.
+    /// <para>
+    /// Дискриминирующий вход: на непустом параллелепипеде все шесть величин
+    /// одинаковы у обоих типов, то есть проверка проходит и на прежнем коде.
+    /// Именно пустое значение отличает их.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Aabb2_EmptyBehavesLikeEmptyAabb3()
+    {
+        Aabb2 empty2 = Aabb2.Empty;
+        Aabb3 empty3 = Aabb3.Empty;
+        Vector2 point2 = new(1f, 2f);
+        Vector3 point3 = new(1f, 2f, 3f);
+
+        Assert.True(empty2.IsEmpty, "Aabb2.Empty обязан быть пустым.");
+        Assert.True(empty3.IsEmpty, "Aabb3.Empty обязан быть пустым.");
+
+        // Центр: у пустого значения ноль, а не NaN.
+        Assert.Equal(Vector2.Zero, empty2.Center);
+
+        // Ближайшая точка и расстояние: исходная точка и ноль, а не -∞ и +∞.
+        Assert.Equal(point2, empty2.ClosestPoint(point2));
+        Assert.Equal(0f, empty2.DistanceTo(point2));
+
+        // Расширение не оживает.
+        Assert.True(empty2.Expand(Vector2.One).IsEmpty, "Expand оживил пустой Aabb2.");
+
+        // Объединение поглощает пустое значение и возвращает второй операнд.
+        Aabb2 ordinary = new(point2, point2 + new Vector2(1f, 1f));
+        Assert.Equal(ordinary, empty2.Union(ordinary));
+
+        // Принадлежность точки и параллелепипеда — одинаково у обоих типов.
+        Assert.Equal(empty3.Contains(point3), empty2.Contains(point2));
+        Assert.Equal(empty3.Contains(Aabb3.Empty), empty2.Contains(Aabb2.Empty));
+
+        // Все шесть величин совпадают с поведением Aabb3 на своём входе: у каждого
+        // типа своя размерность, поэтому сравниваются не точки, а вердикты.
+        Assert.Equal(empty3.Center, new Vector3(empty2.Center.X, empty2.Center.Y, 0f));
+        Assert.Equal(empty3.DistanceTo(point3), empty2.DistanceTo(point2));
+        Assert.Equal(empty3.Contains(point3), empty2.Contains(point2));
+        Assert.Equal(empty3.Expand(Vector3.One).IsEmpty, empty2.Expand(Vector2.One).IsEmpty);
+        Assert.Equal(empty3.Union(new Aabb3(point3, point3 + Vector3.One)).IsEmpty, ordinary.IsEmpty);
+    }
+
+    /// <summary>
+    /// P3-2: страховка — на непустом параллелепипеде типы не расходятся.
+    /// </summary>
+    [Fact]
+    public void Aabb2_NonEmptyBehavesLikeNonEmptyAabb3()
+    {
+        Vector2 point2 = new(1f, 2f);
+        Vector3 point3 = new(1f, 2f, 3f);
+        Aabb2 box2 = new(point2, point2 + new Vector2(2f, 3f));
+        Aabb3 box3 = new(point3, point3 + new Vector3(2f, 3f, 0f));
+
+        Assert.Equal(box3.IsEmpty, box2.IsEmpty);
+        Assert.Equal(box3.Center.X == 0f, box2.Center.X == 0f && box2.Center.Y == 0f);
+        Assert.Equal(box3.ClosestPoint(point3).X == 0f, box2.ClosestPoint(new Vector2(-5f, 9f)).X == 0f);
+        Assert.Equal(0f, box2.DistanceTo(point2));
+    }
+
+    /// <summary>
+    /// P3-2: центр пустого <c>Aabb2</c> не должен быть <c>NaN</c>.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от проверки на равенство с <c>Aabb3</c>, потому что <c>NaN</c>
+    /// не равен ничему, включая себя, и проверка «оба типа дают NaN» прошла бы.
+    /// </remarks>
+    [Fact]
+    public void Aabb2_EmptyCenterIsNotNaN()
+    {
+        Vector2 center = Aabb2.Empty.Center;
+
+        Assert.True(float.IsFinite(center.X) && float.IsFinite(center.Y), $"Центр пустого Aabb2 равен {center}.");
+    }
+
+    /// <summary>
+    /// P3-2: расстояние до пустого <c>Aabb2</c> не должно быть бесконечным.
+    /// </summary>
+    /// <remarks>
+    /// <c>±∞</c> ломает сортировку и сравнение: значение, которое больше всего,
+    /// оказывается «дальним» от любой точки, включая точку самого бокса.
+    /// </remarks>
+    [Fact]
+    public void Aabb2_EmptyDistanceIsFinite()
+    {
+        float distance = Aabb2.Empty.DistanceTo(new Vector2(1f, 2f));
+
+        Assert.True(float.IsFinite(distance), $"Расстояние до пустого Aabb2 равно {distance}.");
+    }
+
+    /// <summary>
+    /// P3-2: два аналогичных типа обязаны отвечать на переставленные границы одинаково.
+    /// </summary>
+    [Theory]
+    [InlineData(1f, 0f)]
+    [InlineData(-1f, -2f)]
+    [InlineData(3f, -3f)]
+    public void Aabb2_ConstructorRejectsSwappedBoundsLikeAabb3(float min, float max)
+    {
+        Assert.Throws<ArgumentException>(() => new Aabb2(new Vector2(min, min), new Vector2(max, max)));
+        Assert.Throws<ArgumentException>(() => new Aabb3(new Vector3(min, min, 0f), new Vector3(max, max, 0f)));
+    }
+
+    /// <summary>
+    /// P3-2: страховка — упорядоченные границы по-прежнему принимаются.
+    /// </summary>
+    [Theory]
+    [InlineData(1f, 1f)]
+    [InlineData(-1f, 1f)]
+    [InlineData(0f, 0f)]
+    public void Aabb2_ConstructorAcceptsOrderedBounds(float min, float max)
+    {
+        Aabb2 box = new(new Vector2(min, min), new Vector2(max, max));
+
+        Assert.Equal(new Vector2(min, min), box.Min);
+        Assert.Equal(new Vector2(max, max), box.Max);
+    }
+
+    /// <summary>
+    /// P3-2: пустой параллелепипед не содержится ни в чём, включая себя.
+    /// </summary>
+    /// <remarks>
+    /// Найдено обратным ходом правки: переставленные границы пустого значения
+    /// удовлетворяли сравнениям <c>+inf &gt;= Min</c> и <c>−inf &lt;= Max</c> в
+    /// любом контейнере, то есть пустой бокс считался содержащимся в пустом.
+    /// <c>Aabb3</c> от такого защищён, <c>Aabb2</c> — нет.
+    /// </remarks>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void Aabb2_EmptyIsContainedInNothing(bool firstIsEmpty, bool secondIsEmpty)
+    {
+        Aabb2 first = firstIsEmpty ? Aabb2.Empty : new Aabb2(new Vector2(0f), new Vector2(1f));
+        Aabb2 second = secondIsEmpty ? Aabb2.Empty : new Aabb2(new Vector2(0f), new Vector2(1f));
+
+        Assert.False(first.Contains(second), $"Пустой Aabb2 содержится в пустом: {first} ⊇ {second}.");
+    }
+
+    /// <summary>
+    /// P3-2: страховка от регрессии — вложенный параллелепипед содержится.
+    /// </summary>
+    [Fact]
+    public void Aabb2_ContainsStillWorksForNestedBoxes()
+    {
+        Aabb2 outer = new(new Vector2(0f), new Vector2(10f, 10f));
+        Aabb2 inner = new(new Vector2(1f, 2f), new Vector2(3f, 4f));
+
+        Assert.True(outer.Contains(inner));
+        Assert.False(inner.Contains(outer));
+    }
+
+    /// <summary>
+    /// P3-2: <c>Expand</c> не должен перевернуться после запрета перестановки в конструкторе.
+    /// </summary>
+    /// <param name="amount">Отступ по каждой оси.</param>
+    /// <remarks>
+    /// Прежний код полагался на то, что конструктор переставляет границы: при
+    /// отступе больше половины размера наивные min/max дали бы бокс, который
+    /// больше исходного. Теперь перестановки нет, поэтому схлопывание должно
+    /// идти в центр — иначе конструктор бросил бы исключение на законном вызове.
+    /// </remarks>
+    [Theory]
+    [InlineData(3f, 1f)]
+    [InlineData(-1f, -2f)]
+    [InlineData(10f, 10f)]
+    [InlineData(-10f, -10f)]
+    [InlineData(2f, 2f)]
+    public void Aabb2_ExpandCollapsesInsteadOfFlipping(float x, float y)
+    {
+        Aabb2 box = new(new Vector2(0f), new Vector2(4f, 4f));
+        Aabb2 expanded = box.Expand(new Vector2(x, y));
+
+        Assert.False(expanded.IsEmpty, $"Expand({x}, {y}) перевернул параллелепипед: {expanded}.");
+        Assert.True(expanded.Min.X <= expanded.Max.X && expanded.Min.Y <= expanded.Max.Y);
+    }
+
+    /// <summary>
+    /// P3-2: <c>FromRect</c> обязан принимать прямоугольник с отрицательным размером.
+    /// </summary>
+    /// <param name="size">Размер, который может быть отрицательным.</param>
+    /// <remarks>
+    /// <c>Rect</c> отрицательный размер допускает и сам его нормализует: <c>Left</c>,
+    /// <c>Top</c>, <c>Right</c> и <c>Bottom</c> упорядочивают координаты сами. Значит
+    /// и <c>FromRect</c> обязан упорядочить углы, иначе после запрета перестановки
+    /// в конструкторе фабрика начала бы бросать на законных данных.
+    /// </remarks>
+    [Theory]
+    [InlineData(4f, 2f, 1f, 2f, 5f, 4f)]
+    [InlineData(-4f, 2f, -3f, 2f, 1f, 4f)]
+    [InlineData(4f, -2f, 1f, 0f, 5f, 2f)]
+    [InlineData(-4f, -2f, -3f, 0f, 1f, 2f)]
+    public void Aabb2_FromRectAcceptsEitherSignOfSize(
+        float width,
+        float height,
+        float expectedMinX,
+        float expectedMinY,
+        float expectedMaxX,
+        float expectedMaxY)
+    {
+        Rect rect = new(new Vector2(1f, 2f), new Vector2(width, height));
+        Aabb2 box = Aabb2.FromRect(rect);
+
+        Assert.Equal(new Vector2(expectedMinX, expectedMinY), box.Min);
+        Assert.Equal(new Vector2(expectedMaxX, expectedMaxY), box.Max);
+        Assert.False(box.IsEmpty);
+    }
+
+    /// <summary>
+    /// P3-2: <c>FromCenterAndHalfSize</c> с отрицательной половиной — ошибка вызывающего.
+    /// </summary>
+    /// <remarks>
+    /// Проверка обязательна: после запрета перестановки в конструкторе такой вызов
+    /// бросает, и это осознанное изменение поведения. <c>Aabb3</c> отвечает так же.
+    /// </remarks>
+    [Fact]
+    public void Aabb2_FromCenterAndHalfSizeRejectsNegativeHalfSize()
+    {
+        Assert.Throws<ArgumentException>(() => Aabb2.FromCenterAndHalfSize(Vector2.Zero, new Vector2(-1f, 1f)));
+        Assert.Throws<ArgumentException>(() => Aabb3.FromCenterAndHalfSize(Vector3.Zero, new Vector3(-1f, 1f, 1f)));
+    }
+
+    // ==================================================================
+    // P3-3. Interpolation.Repeat теряет значение на больших величинах.
+
+    /// <summary>
+    /// P3-3: остаток на больших величинах обязан совпадать с точным.
+    /// </summary>
+    /// <param name="value">Исходное значение.</param>
+    /// <param name="length">Период.</param>
+    /// <param name="expected">Точный остаток, посчитанный вне float.</param>
+    /// <remarks>
+    /// Ожидания получены не рассуждением, а точной целочисленной арифметикой:
+    /// <c>float</c> — это дробь со знаменателем в виде степени двойки, поэтому
+    /// остаток от деления двух таких чисел есть точный остаток от деления целых,
+    /// и его считает <c>BigInteger</c>. Ни <c>float</c>, ни <c>double</c> этот
+    /// остаток не дают ровно там, где проверяется дефект.
+    /// <para>
+    /// Дискриминирующий вход: на прежнем коде все шесть строк возвращали ноль.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(1e8f, 7f, 2f)]
+    [InlineData(1e9f, 0.3f, 0.26357174f)]
+    [InlineData(0.3f, 1e-9f, 4.0550896e-10f)]
+    [InlineData(1e10f, 7f, 4f)]
+    [InlineData(1e6f, 0.7f, 0.3170299f)]
+    [InlineData(123456f, 0.000123f, 1.838943e-5f)]
+    public void Repeat_MatchesExactModuloOnLargeValues(float value, float length, float expected)
+    {
+        Assert.Equal(expected, Interpolation.Repeat(value, length));
+    }
+
+    /// <summary>
+    /// P3-3: за пределом точного диапазона остаток приблизительный, но не нулевой.
+    /// </summary>
+    /// <remarks>
+    /// Отношение величин здесь 3.3e9, то есть за измеренной границей 1e8. Точный
+    /// остаток равен 0.036428273, метод даёт 0.036428213: расхождение 6e-8, то
+    /// есть около 16 последних разрядов результата. Причина не в правке, а в том,
+    /// что остаток получается вычитанием двух чисел величиной 1e9, и в двойной
+    /// точности это вычитание теряет разряды.
+    /// <para>
+    /// Дискриминирующий вход: прежний путь возвращал здесь ровно ноль, то есть
+    /// полный промах, а не приближение.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Repeat_BeyondExactRangeIsApproximateButNotZero()
+    {
+        float result = Interpolation.Repeat(-1e9f, 0.3f);
+
+        Assert.True(MathF.Abs(result - 0.036428273f) <= 1e-7f, $"Repeat(-1e9, 0.3) = {result:R}.");
+        Assert.True(result > 0f, "Остаток обнулился вместо приближения.");
+    }
+
+    /// <summary>
+    /// P3-3: страховка — на малых величинах результат прежний.
+    /// </summary>
+    /// <param name="value">Исходное значение.</param>
+    /// <param name="length">Период.</param>
+    /// <param name="expected">Ожидаемый остаток.</param>
+    [Theory]
+    [InlineData(1000.5f, 1f, 0.5f)]
+    [InlineData(-1000.5f, 1f, 0.5f)]
+    [InlineData(1e7f, 3f, 1f)]
+    [InlineData(2.5f, 1f, 0.5f)]
+    [InlineData(-2.5f, 1f, 0.5f)]
+    [InlineData(0f, 7f, 0f)]
+    public void Repeat_KeepsExactResultOnSmallValues(float value, float length, float expected)
+    {
+        MathAssert.Equal(expected, Interpolation.Repeat(value, length), 1e-6f);
+    }
+
+    /// <summary>
+    /// P3-3: договорённость о диапазоне обязана выполняться всегда.
+    /// </summary>
+    /// <remarks>
+    /// За пределами 2⁵³ в отношении значений остаток перестаёт быть определённым,
+    /// и метод возвращает 0. Это вынужденно: точность теряется настолько, что
+    /// любой представитель диапазона одинаково хорош. Но результат обязан быть
+    /// конечным и лежать в периоде — иначе вызывающий получает <c>−∞</c> или
+    /// число вне диапазона, то есть метод, документированный как
+    /// <c>0..length</c>, даёт нечто другое.
+    /// <para>
+    /// Дискриминирующий вход: при длине 1e-30 прежний путь давал <c>−∞</c>,
+    /// потому что <c>value / length</c> переполнялось и <c>Floor</c> давал
+    /// бесконечность.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Repeat_ResultStaysWithinPeriodForEveryFiniteInput()
+    {
+        (float Value, float Length)[] cases =
+        {
+            (1e38f, 3f),
+            (-1e38f, 3f),
+            (3.4e38f, 1e-30f),
+            (-3.4e38f, 1e-30f),
+            (1e-45f, 1e-30f),
+            (1e20f, 3f),
+            (1e30f, 7f),
+            (16777216f, 1f),
+            (16777217f, 1f),
+        };
+
+        foreach ((float value, float length) in cases)
+        {
+            float result = Interpolation.Repeat(value, length);
+
+            Assert.True(
+                float.IsFinite(result) && result >= 0f && result <= length,
+                $"Repeat({value:R}, {length:R}) = {result:R}, ожидалось число в диапазоне [0; {length:R}].");
+        }
+    }
+
+    /// <summary>
+    /// P3-3: <c>PingPong</c> наследует исправление, причём со своей стороны.
+    /// </summary>
+    /// <param name="value">Исходное значение.</param>
+    /// <param name="length">Половина периода.</param>
+    /// <param name="expected">Ожидаемое значение отражения.</param>
+    /// <remarks>
+    /// Дискриминирующий вход: прежний путь возвращал здесь ровно ноль. Причина не
+    /// только в остатке — своё деление на <c>2 * length</c> тоже отбрасывало
+    /// дробную часть, поэтому одной правки остатка не хватало.
+    /// </remarks>
+    [Theory]
+    [InlineData(1e8f, 3f, 0.6666667f)]
+    [InlineData(1e10f, 3f, 0.6666665f)]
+    [InlineData(1e9f, 7f, 0.85714287f)]
+    [InlineData(1e10f, 11f, 0.9090909f)]
+    public void PingPong_InheritsTheFix(float value, float length, float expected)
+    {
+        Assert.Equal(expected, Interpolation.PingPong(value, length));
+    }
+
+    /// <summary>
+    /// P3-3: страховка от переусердствования — на малых величинах <c>PingPong</c>
+    /// не изменился.
+    /// </summary>
+    /// <param name="value">Исходное значение.</param>
+    /// <param name="length">Половина периода.</param>
+    /// <param name="expected">Ожидаемое значение отражения.</param>
+    [Theory]
+    [InlineData(0f, 1f, 0f)]
+    [InlineData(1f, 1f, 1f)]
+    [InlineData(2f, 1f, 0f)]
+    [InlineData(0.5f, 1f, 0.5f)]
+    [InlineData(1.5f, 1f, 0.5f)]
+    [InlineData(-0.5f, 1f, 0.5f)]
+    [InlineData(3f, 1f, 1f)]
+    [InlineData(0.25f, 1f, 0.25f)]
+    public void PingPong_KeepsExactResultOnSmallValues(float value, float length, float expected)
+    {
+        Assert.Equal(expected, Interpolation.PingPong(value, length));
+    }
+
+    /// <summary>
+    /// P3-3: <c>Repeat01</c> на больших величинах обязан оставаться в диапазоне.
+    /// </summary>
+    /// <param name="value">Исходное значение.</param>
+    /// <remarks>
+    /// Проверяется не значение, а договорённость о диапазоне, и на это есть
+    /// причина. Ненулевого результата у <c>Repeat01</c> на больших величинах
+    /// быть не может: при величине порядка 1e7 в <c>float</c> нет разряда меньше
+    /// единицы, поэтому дробной части во входном числе нет. Ноль здесь — верный
+    /// ответ, а не дефект, и проверка «больше нуля» была бы неверной.
+    /// </remarks>
+    [Theory]
+    [InlineData(1e8f)]
+    [InlineData(1e9f)]
+    [InlineData(1e10f)]
+    [InlineData(-1e8f)]
+    public void Repeat01_StaysInRangeOnLargeValues(float value)
+    {
+        float result = Interpolation.Repeat01(value);
+
+        Assert.True(result >= 0f && result <= 1f, $"Repeat01({value:R}) = {result:R}.");
+    }
+
+    /// <summary>
+    /// P3-3: неположительный период по-прежнему бросает исключение.
+    /// </summary>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(-1f)]
+    public void Repeat_StillRejectsNonPositivePeriod(float length)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Interpolation.Repeat(1f, length));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Interpolation.PingPong(1f, length));
+    }
+
+    /// <summary>
+    /// Биты числа <c>+0</c>.</summary>
+// ==================================================================
+    // P3-4. JsonArrayReaderHelper аллоцирует массив строк на каждый вызов.
+
+    /// <summary>
+    /// P3-4: объектная форма разбора не должна выделять память.
+    /// </summary>
+    /// <param name="json">Разбираемый объект.</param>
+    /// <param name="expectedX">Ожидаемое X.</param>
+    /// <param name="expectedY">Ожидаемое Y.</param>
+    /// <param name="expectedZ">Ожидаемое Z.</param>
+    /// <remarks>
+    /// Проверяется не только отсутствие мусора: значение обязано остаться прежним.
+    /// Замена <c>reader.GetString()</c> на <c>ValueTextEquals</c> меняет способ
+    /// сравнения имени свойства, то есть затрагивает и разбор, и это легко сломать
+    /// вместе с оптимизацией.
+    /// <para>
+    /// Дискриминирующий вход: массивная форма не аллоцировала ничего и прежде,
+    /// поэтому проверка идёт по объектной форме.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("{\"x\":1.5,\"y\":2.5,\"z\":3.5}", 1.5f, 2.5f, 3.5f)]
+    [InlineData("{\"z\":3.5,\"x\":1.5}", 1.5f, 0f, 3.5f)]
+    [InlineData("{\"x\":1.5,\"extra\":9,\"y\":2.5}", 1.5f, 2.5f, 0f)]
+    public void Json_ObjectFormAllocatesNothingAndKeepsValues(
+        string json,
+        float expectedX,
+        float expectedY,
+        float expectedZ)
+    {
+        JsonSerializerOptions options = CreateVectorOptions();
+
+        Vector3 warm = JsonSerializer.Deserialize<Vector3>(json, options);
+        MathAssert.Equal(new Vector3(expectedX, expectedY, expectedZ), warm);
+
+        const int Iterations = 20_000;
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < Iterations; i++)
+        {
+            _ = JsonSerializer.Deserialize<Vector3>(json, options);
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.True(
+            allocated == 0,
+            $"Объектная форма разбора выделила {allocated / (double)Iterations:F1} байт на вызов.");
+    }
+
+    /// <summary>
+    /// P3-4: страховка — массивная форма по-прежнему не аллоцирует.
+    /// </summary>
+    [Fact]
+    public void Json_ArrayFormStillAllocatesNothing()
+    {
+        JsonSerializerOptions options = CreateVectorOptions();
+
+        _ = JsonSerializer.Deserialize<Vector3>("[1.5,2.5,3.5]", options);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 20_000; i++)
+        {
+            _ = JsonSerializer.Deserialize<Vector3>("[1.5,2.5,3.5]", options);
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.True(allocated == 0, $"Массивная форма выделила {allocated / 20_000.0:F1} байт на вызов.");
+    }
+
+    private static JsonSerializerOptions CreateVectorOptions()
+    {
+        JsonSerializerOptions options = new() { IncludeFields = true };
+        options.Converters.Add(new Vector3JsonConverter());
+        return options;
+    }
+
+    // ==================================================================
+    // P3-5. CreateOrthographic2D со значениями по умолчанию режет глубину до метра.
+
+    /// <summary>
+    /// P3-5: умолчания обязаны покрывать игровой масштаб глубины.
+    /// </summary>
+    /// <param name="z">Координата Z вдоль взгляда.</param>
+    /// <param name="visible">Ожидается ли точка в диапазоне отсечения.</param>
+    /// <remarks>
+    /// Дискриминирующий вход: при прежних умолчаниях <c>−1</c> и <c>1</c> в кадр
+    /// попадал только метр глубины, и все точки с <c>|z| &gt; 1</c> отсекались.
+    /// Здесь проверяются и сто метров, и километр, то есть масштабы, на которых
+    /// ошибка видна.
+    /// </remarks>
+    [Theory]
+    [InlineData(-0.5f, true)]
+    [InlineData(-1f, true)]
+    [InlineData(-10f, true)]
+    [InlineData(-100f, true)]
+    [InlineData(-999f, true)]
+    [InlineData(0f, true)]
+    [InlineData(10f, true)]
+    [InlineData(100f, true)]
+    [InlineData(999f, true)]
+    [InlineData(-1001f, false)]
+    [InlineData(1001f, false)]
+    public void CreateOrthographic2D_DefaultDepthRangeCoversTheWorldScale(float z, bool visible)
+    {
+        Matrix4x4 projection = MatrixExtensions.CreateOrthographic2D(100f, 50f);
+        float ndcZ = Vector4.Transform(new Vector4(0f, 0f, z, 1f), projection).Z;
+
+        Assert.True(
+            visible == (ndcZ >= -1f && ndcZ <= 1f),
+            $"ndc.z = {ndcZ} при z = {z}, ожидалась видимость {visible}.");
+    }
+
+    /// <summary>
+    /// P3-5: страховка — умолчания не изменили видимую область по X и Y.
+    /// </summary>
+    [Fact]
+    public void CreateOrthographic2D_DefaultKeepsOriginInCenter()
+    {
+        Matrix4x4 projection = MatrixExtensions.CreateOrthographic2D(100f, 50f);
+
+        Vector4 origin = Vector4.Transform(new Vector4(0f, 0f, 0f, 1f), projection);
+        Vector4 corner = Vector4.Transform(new Vector4(50f, 25f, 0f, 1f), projection);
+
+        MathAssert.Equal(0f, origin.X, 1e-6f);
+        MathAssert.Equal(0f, origin.Y, 1e-6f);
+        MathAssert.Equal(1f, corner.X, 1e-6f);
+        MathAssert.Equal(1f, corner.Y, 1e-6f);
+    }
+
+    /// <summary>
+    /// P3-5: страховка — явный диапазон задаётся вызывающим как и раньше.
+    /// </summary>
+    [Fact]
+    public void CreateOrthographic2D_ExplicitRangeStillWins()
+    {
+        Matrix4x4 projection = MatrixExtensions.CreateOrthographic2D(100f, 50f, 0.1f, 100f);
+
+        MathAssert.Equal(-1f, Vector4.Transform(new Vector4(0f, 0f, -0.1f, 1f), projection).Z, 1e-5f);
+        MathAssert.Equal(1f, Vector4.Transform(new Vector4(0f, 0f, -100f, 1f), projection).Z, 1e-5f);
+        Assert.True(
+            Vector4.Transform(new Vector4(0f, 0f, -101f, 1f), projection).Z > 1f,
+            "Лишний диапазон не отсёкся.");
+    }
+
+    // ==================================================================
+    // P3-6. Capsule3 измеряет параллельность в абсолютных единицах,
+    // Collision — в относительных.
+
+    /// <summary>
+    /// P3-6: вердикт не должен зависеть от масштаба мира.
+    /// </summary>
+    /// <param name="length">Длина осей.</param>
+    /// <param name="radius">Радиус капсул.</param>
+    /// <remarks>
+    /// Геометрия косая: первая ось лежит вдоль X, вторая повёрнута в плоскости XZ
+    /// и сдвинута по Y, то есть прямые скрещиваются и не компланарны. Именно здесь
+    /// запасная ветвь «отрезки параллельны» отвечает неверно: для скрещивающихся
+    /// прямых ближайшие точки не находятся проекцией вдоль одной прямой.
+    /// <para>
+    /// Дискриминирующий вход. Расстояние между осями равно <c>0.2 * length</c> при
+    /// сумме радиусов <c>2.02 * radius</c>, то есть капсулы перекрываются. Прежний
+    /// абсолютный порог насчитывал расстояние на 11.8 % больше истинного и отвечал
+    /// «промах»; относительный даёт точное расстояние и отвечает «попадание».
+    /// </para>
+    /// <para>
+    /// Запас в 1 % от касания сделан намеренно: при радиусе ровно в половину
+    /// расстояния ответ одинаков при обоих порогах, и проверка ничего бы не
+    /// различала.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(1e-4f, 1.01e-5f)]
+    [InlineData(1e-5f, 1.01e-6f)]
+    public void Capsule3_VerdictDoesNotDependOnWorldScale(float length, float radius)
+    {
+        Capsule3 first = new(Vector3.Zero, new Vector3(length, 0f, 0f), radius);
+        Capsule3 second = new(
+            new Vector3(length, 0.2f * length, 0f),
+            new Vector3(0.6f * length, 0.2f * length, -0.1f * length),
+            radius);
+
+        Assert.True(
+            first.Intersects(second),
+            $"Капсулы длиной {length:R} не пересеклись, хотя расстояние между осями 0.2*length при сумме радиусов {2 * radius:R}.");
+    }
+
+    /// <summary>
+    /// P3-6: страховка от переусердствования — настоящий промах остаётся промахом.
+    /// </summary>
+    /// <param name="length">Длина осей.</param>
+    [Theory]
+    [InlineData(1e-4f)]
+    [InlineData(1e-5f)]
+    public void Capsule3_TrueMissStaysMiss(float length)
+    {
+        Capsule3 first = new(Vector3.Zero, new Vector3(length, 0f, 0f), 1e-3f * length);
+        Capsule3 second = new(
+            new Vector3(length, 5f * length, 0f),
+            new Vector3(0.6f * length, 5f * length, -0.1f * length),
+            1e-3f * length);
+
+        Assert.False(first.Intersects(second), "Капсулы с расстоянием между осями 5*length пересеклись.");
+    }
+
+    // ==================================================================
+    // P3-7. SignedDistanceToLine возвращал не расстояние, а расстояние,
+    // умноженное на длину нормали.
+
+    /// <summary>
+    /// P3-7: честный метод не зависит от длины нормали.
+    /// </summary>
+    /// <param name="normalX">X нормали.</param>
+    /// <param name="normalY">Y нормали.</param>
+    /// <param name="expected">Ожидаемое расстояние.</param>
+    /// <remarks>
+    /// Дискриминирующий вход: нормали длиной 3 и 5 прежний метод умножал ответ на
+    /// их длину, то есть давал тройное расстояние там, где требовалось единичное.
+    /// </remarks>
+    [Theory]
+    [InlineData(1f, 0f, 1f)]
+    [InlineData(3f, 0f, 1f)]
+    [InlineData(0f, 5f, 2f)]
+    [InlineData(3f, 4f, 2.2f)]
+    [InlineData(0.001f, 0f, 1f)]
+    [InlineData(1000f, 0f, 1f)]
+    public void SignedDistanceToLine_DoesNotDependOnNormalLength(
+        float normalX,
+        float normalY,
+        float expected)
+    {
+        Vector2 point = new(1f, 2f);
+        Vector2 normal = new(normalX, normalY);
+
+        MathAssert.Equal(expected, point.SignedDistanceToLine(Vector2.Zero, normal), 1e-5f);
+    }
+
+    /// <summary>
+    /// P3-7: знак задаётся нормалью, а её длина на него не влияет.
+    /// </summary>
+    /// <param name="normalX">X нормали.</param>
+    /// <param name="normalY">Y нормали.</param>
+    /// <remarks>
+    /// Проверяется не «какая сторона положительная», а противоположность знаков у
+    /// противоположных точек: какая именно сторона положительная, задаёт сама
+    /// нормаль, и утверждать иное значило бы описывать конкретную нормаль вместо
+    /// контракта. Длина нормали в проверку не входит, поэтому при её изменении
+    /// знак обязан остаться тем же.
+    /// </remarks>
+    [Theory]
+    [InlineData(1f, 0f)]
+    [InlineData(3f, 0f)]
+    [InlineData(0f, 1f)]
+    [InlineData(0f, -4f)]
+    [InlineData(2f, 2f)]
+    [InlineData(0.3f, -0.9f)]
+    public void SignedDistanceToLine_KeepsSignIndependentOfNormalLength(float normalX, float normalY)
+    {
+        Vector2 rawNormal = new(normalX, normalY);
+        Vector2 unitNormal = rawNormal.SafeNormalize();
+        Vector2 scaledNormal = rawNormal * 7f;
+
+        Vector2 point = new(1f, 2f);
+        Vector2 opposite = -point;
+
+        float first = point.SignedDistanceToLine(Vector2.Zero, unitNormal);
+        float second = opposite.SignedDistanceToLine(Vector2.Zero, unitNormal);
+        float scaled = point.SignedDistanceToLine(Vector2.Zero, scaledNormal);
+
+        Assert.True(first != 0f, "Точка лежит на прямой.");
+        Assert.True(first * second < 0f, $"Знаки не противоположны: {first} и {second}.");
+        Assert.Equal(first, scaled, 1e-5f);
+    }
+
+    /// <summary>
+    /// P3-7: переименованный метод честно называет то, что возвращает.
+    /// </summary>
+    /// <param name="normalX">X нормали.</param>
+    /// <param name="normalY">Y нормали.</param>
+    /// <param name="expected">Ожидаемое значение.</param>
+    /// <remarks>
+    /// Проверяется договорённость нового имени: значение равно скалярному
+    /// произведению, то есть расстоянию, умноженному на длину нормали.
+    /// </remarks>
+    [Theory]
+    [InlineData(1f, 0f, 1f)]
+    [InlineData(3f, 0f, 3f)]
+    [InlineData(0f, 5f, 10f)]
+    [InlineData(3f, 4f, 11f)]
+    public void SignedLineOffset_ReturnsTheScaledDistance(float normalX, float normalY, float expected)
+    {
+        Vector2 point = new(1f, 2f);
+        Vector2 normal = new(normalX, normalY);
+
+        MathAssert.Equal(expected, point.SignedLineOffset(Vector2.Zero, normal), 1e-5f);
+    }
+
+    /// <summary>
+    /// P3-7: на единичной нормали оба метода обязаны совпадать.
+    /// </summary>
+    /// <param name="normalX">X нормали.</param>
+    /// <param name="normalY">Y нормали.</param>
+    [Theory]
+    [InlineData(1f, 0f)]
+    [InlineData(0f, 1f)]
+    [InlineData(0.6f, 0.8f)]
+    [InlineData(-0.8f, 0.6f)]
+    public void SignedLineOffset_MatchesDistanceOnUnitNormal(float normalX, float normalY)
+    {
+        Vector2 point = new(3f, -4f);
+        Vector2 normal = new(normalX, normalY);
+
+        MathAssert.Equal(
+            point.SignedDistanceToLine(Vector2.Zero, normal),
+            point.SignedLineOffset(Vector2.Zero, normal),
+            1e-6f);
+    }
+
+    /// <summary>
+    /// P3-7: нулевая нормаль не определена для нормализующего метода.
+    /// </summary>
+    [Fact]
+    public void SignedDistanceToLine_RejectsZeroNormal()
+    {
+        Vector2 point = new(1f, 2f);
+
+        Assert.Throws<ArgumentException>(() => point.SignedDistanceToLine(Vector2.Zero, Vector2.Zero));
+        Assert.Equal(0f, point.SignedLineOffset(Vector2.Zero, Vector2.Zero));
+    }
+
+    // ==================================================================
+    // P3-8. ToEuler терял точность в полосе шириной около четверти градуса
+    // перед блокировкой.
+
+    /// <summary>
+    /// Полоса точности тангажа по результату измерения, в градусах.
+    /// </summary>
+    /// <remarks>
+    /// Измерено на 2000 парах рыскания и крена при каждом значении тангажа: худшая
+    /// ошибка лежит между 1.1e-5° и 2.2e-5°. Полоса взята с запасом и выражена в
+    /// градусах, потому что ошибка сравнивается с углом. Прежний <c>asin</c> на этих
+    /// же углах давал от 1.1e-3° до 4.4e-2°, то есть в сотни раз больше полосы.
+    /// </remarks>
+    private const double PitchToleranceDegrees = 1e-4;
+
+    /// <summary>
+    /// P3-8: тангаж у полюса обязан быть точным.
+    /// </summary>
+    /// <param name="pitchDegrees">Заданный тангаж в градусах.</param>
+    /// <remarks>
+    /// Проверяются именно углы, а не ориентация: ориентация и до правки
+    /// восстанавливалась верно, и проверка на неё прошла бы при любом состоянии
+    /// кода. Ориентацию следит отдельная проверка ниже.
+    /// </remarks>
+    [Theory]
+    [InlineData(89f)]
+    [InlineData(89.5f)]
+    [InlineData(89.8f)]
+    [InlineData(89.9f)]
+    [InlineData(89.95f)]
+    [InlineData(89.99f)]
+    [InlineData(90f)]
+    [InlineData(-90f)]
+    [InlineData(-89.9f)]
+    public void ToEuler_PitchStaysAccurateNearThePole(float pitchDegrees)
+    {
+        for (int i = 0; i < 60; i++)
+        {
+            Angle yaw = Angle.FromDegrees(i * 6f - 180f);
+            Angle roll = Angle.FromDegrees(i * 11f - 330f);
+            Angle pitch = Angle.FromDegrees(pitchDegrees);
+            Quaternion rotation = QuaternionExtensions.FromEuler(yaw, pitch, roll);
+
+            (Angle _, Angle actual, Angle _) = QuaternionExtensions.ToEuler(rotation);
+
+            double error = Math.Abs(Angle.NormalizeRadians(actual.Radians - pitch.Radians)) * 180.0 / Math.PI;
+            Assert.True(
+                error <= PitchToleranceDegrees,
+                $"Тангаж {pitchDegrees}° восстановлен с ошибкой {error:E3}° при рыскании {yaw.Degrees:F1}° и крене {roll.Degrees:F1}°.");
+        }
+    }
+
+    /// <summary>
+    /// P3-8: страховка — точность на обычных углах не изменилась.
+    /// </summary>
+    /// <param name="pitchDegrees">Заданный тангаж в градусах.</param>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(30f)]
+    [InlineData(45f)]
+    [InlineData(60f)]
+    [InlineData(80f)]
+    [InlineData(-45f)]
+    public void ToEuler_PitchStaysAccurateAwayFromThePole(float pitchDegrees)
+    {
+        for (int i = 0; i < 20; i++)
+        {
+            Angle pitch = Angle.FromDegrees(pitchDegrees);
+            Quaternion rotation = QuaternionExtensions.FromEuler(
+                Angle.FromDegrees(i * 17f - 170f),
+                pitch,
+                Angle.FromDegrees(i * 23f - 230f));
+
+            (Angle _, Angle actual, Angle _) = QuaternionExtensions.ToEuler(rotation);
+
+            double error = Math.Abs(Angle.NormalizeRadians(actual.Radians - pitch.Radians)) * 180.0 / Math.PI;
+            Assert.True(error <= PitchToleranceDegrees, $"Тангаж {pitchDegrees}° восстановлен с ошибкой {error:E3}°.");
+        }
+    }
+
+    /// <summary>
+    /// P3-8: ориентация у полюса обязана восстанавливаться верно.
+    /// </summary>
+    /// <param name="pitchDegrees">Заданный тангаж в градусах.</param>
+    /// <remarks>
+    /// Ориентация мерится расстоянием между базисными векторами, а не через
+    /// <c>2 * acos(dot)</c>: у <c>acos</c> производная бесконечна в единице, то
+    /// есть мера имеет пол около 0.08° и сама не способна увидеть дефект.
+    /// </remarks>
+    [Theory]
+    [InlineData(89.9f)]
+    [InlineData(90f)]
+    [InlineData(-90f)]
+    public void ToEuler_OrientationIsPreservedAtThePole(float pitchDegrees)
+    {
+        double worst = 0;
+        for (int i = 0; i < 60; i++)
+        {
+            Angle yaw = Angle.FromDegrees(i * 6f - 180f);
+            Angle roll = Angle.FromDegrees(i * 11f - 330f);
+            Angle pitch = Angle.FromDegrees(pitchDegrees);
+            Quaternion rotation = QuaternionExtensions.FromEuler(yaw, pitch, roll);
+
+            (Angle actualYaw, Angle actualPitch, Angle actualRoll) = QuaternionExtensions.ToEuler(rotation);
+            Quaternion restored = QuaternionExtensions.FromEuler(actualYaw, actualPitch, actualRoll);
+
+            worst = Math.Max(worst, BasisDistance(rotation, restored));
+        }
+
+        Assert.True(worst <= 1e-3, $"Ориентация разошлась на {worst:E3} при тангаже {pitchDegrees}°.");
+    }
+
+    /// <summary>
+    /// P3-8: страховка от переусердствования — полоса блокировки не изменилась.
+    /// </summary>
+    /// <param name="pitchDegrees">Заданный тангаж в градусах.</param>
+    /// <remarks>
+    /// Расширять полосу не следует, и это проверено измерением: ошибка рыскания
+    /// растёт как <c>1 / cos(тангаж)</c> независимо от способа извлечения, и
+    /// расширение лишь переносит границу договора, не уменьшая ошибку. Здесь
+    /// фиксируется контракт: при <c>|pitch| ≥ 89.9184°</c> рыскание равно нулю по
+    /// договорённости, и крен при этом определяется однозначно.
+    /// </remarks>
+    [Theory]
+    [InlineData(90f)]
+    [InlineData(89.99f)]
+    [InlineData(-90f)]
+    public void ToEuler_StillForcesZeroYawInTheLockBand(float pitchDegrees)
+    {
+        Quaternion rotation = QuaternionExtensions.FromEuler(
+            Angle.FromDegrees(37f),
+            Angle.FromDegrees(pitchDegrees),
+            Angle.FromDegrees(112f));
+
+        (Angle yaw, Angle _, Angle _) = QuaternionExtensions.ToEuler(rotation);
+
+        Assert.Equal(0f, yaw.Radians);
+    }
+
+    /// <summary>
+    /// Расстояние между базисными векторами двух поворотов.
+    /// </summary>
+    /// <param name="first">Первый поворот.</param>
+    /// <param name="second">Второй поворот.</param>
+    /// <returns>Наибольшее расстояние между соответствующими базисными векторами.</returns>
+    private static double BasisDistance(Quaternion first, Quaternion second)
+    {
+        Vector3[] basis = { Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ };
+        double worst = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            worst = Math.Max(
+                worst,
+                Vector3.Distance(Vector3.Transform(basis[i], first), Vector3.Transform(basis[i], second)));
+        }
+
+        return worst;
+    }
+
     private const int PositiveZeroBits = 0x00000000;
 
     /// <summary>Биты числа <c>−0</c>.</summary>
@@ -1037,6 +2075,13 @@ public class DefectRegressionTests
     /// <summary>Восстанавливает число по его битовому образу.</summary>
     /// <param name="bits">Битовый образ float.</param>
     /// <returns>Число, в том числе знаковый ноль.</returns>
+    /// <summary>Переводит двумерный вектор в трёхмерный, добавляя ноль по Z.</summary>
+    private static Vector3 ToVector3(Vector2 value) => new(value.X, value.Y, 0f);
+
+    /// <summary>Проверяет, что шаг не превышен по модулю разности.</summary>
+    private static bool StepRespected(float from, float result, float step)
+        => MathF.Abs(result - from) <= step + 1e-4f;
+
     private static float FromBits(int bits) => BitConverter.Int32BitsToSingle(bits);
 
     /// <summary>

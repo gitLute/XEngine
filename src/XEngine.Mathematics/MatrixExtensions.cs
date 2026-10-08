@@ -29,15 +29,35 @@ public static class MatrixExtensions
     /// </summary>
     /// <param name="width">Ширина видимой области.</param>
     /// <param name="height">Высота видимой области.</param>
-    /// <param name="nearPlane">Ближняя плоскость отсечения.</param>
-    /// <param name="farPlane">Дальняя плоскость отсечения.</param>
+    /// <param name="nearPlane">
+    /// Ближняя плоскость отсечения, расстояние вдоль −Z. По умолчанию километр
+    /// за камерой.
+    /// </param>
+    /// <param name="farPlane">
+    /// Дальняя плоскость отсечения, расстояние вдоль −Z. По умолчанию километр
+    /// перед камерой.
+    /// </param>
     /// <returns>Матрица проекции.</returns>
     /// <remarks>
     /// Собственная реализация, а не <see cref="Matrix4x4.CreateOrthographic"/>:
     /// вариант BCL даёт диапазон глубины [0; 1], а clip space OpenGL требует
     /// [-1; 1]. Взяв BCL-вариант по незнанию, теряется половина точности
     /// глубины и проекция перестаёт совпадать с остальными проекциями движка.
+    /// <para>
+    /// <paramref name="nearPlane"/> и <paramref name="farPlane"/> трактуются как
+    /// расстояния вдоль −Z, а не как координаты Z: <c>z = −near → −1</c>,
+    /// <c>z = −far → +1</c>. Это тот же неочевидный контракт, что и в
+    /// перспективной проекции, и он зафиксирован в разделе 4 документа.
+    /// </para>
+    /// <para>
+    /// Умолчания были <c>−1</c> и <c>1</c>, то есть в кадр попадал ровно метр
+    /// глубины перед камерой, а вторая половина диапазона NDC уходила на область
+    /// за ней. Для 2.5D это самая вероятная проекция в движке, и молчаливое
+    /// отсечение всего, что дальше метра, не имеет видимой причины. Километр в
+    /// каждую сторону — это порядок размера игрового мира; вызывающему, которому
+    /// нужен свой диапазон, остаётся задать его явно, как и раньше.
+    /// </para>
     /// </remarks>
-    public static Matrix4x4 CreateOrthographic2D(float width, float height, float nearPlane = -1f, float farPlane = 1f)
+    public static Matrix4x4 CreateOrthographic2D(float width, float height, float nearPlane = -1000f, float farPlane = 1000f)
         => Matrix4x4Extensions.CreateOrthographic(width, height, nearPlane, farPlane);
 }
