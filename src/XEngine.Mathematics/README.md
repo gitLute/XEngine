@@ -16,35 +16,25 @@
 
 ## Состав
 
-| Файл | Содержание |
+Файлы разложены по областям. **Пространства имён с папками не связаны**: всё
+объявлено в `XEngine.Mathematics` (кроме `Serialization/`), и папка отвечает только
+за навигацию по коду. Поэтому перенос файла между папками не требует правок
+в вызывающем коде.
+
+| Каталог | Файлы и содержание |
 |---|---|
-| `Scalar.cs` | `Epsilon`, `Sign`, `IsNearlyZero`, `IsNearlyEqual`, `Snap`, `Clamp`, перевод градусов и радиан |
-| `Angle.cs` | угол с нормализацией в `(−π; π]`, интерполяция по кратчайшей дуге, поворот вектора, `MoveTowards` |
-| `Trig.cs` | фасад трансцендентных функций: два варианта сборки выбираются компиляцией |
-| `DeterministicMath.cs` | многочлены вместо `MathF`, когда нужна побитовая воспроизводимость |
-| `VectorExtensions.cs` | операции поверх `Vector2`: `FromPolar`, `Rotate`, `WithDirection`, `Perpendicular`, `ToAngle`, `SafeNormalize`, `Project`, `MoveTowards` |
-| `Vector3Extensions.cs` | операции поверх `Vector3`: `RotateAround`, `ToAngle`, `SignedAngleAround`, `Perpendicular`, `FromSpherical`, проекции на плоскость |
-| `Matrix3x2Extensions.cs` | `CreateTransform` (позиция, угол, масштаб, опорная точка), разбор матрицы, `TryInvert`, `ToMatrix4x4` |
-| `Matrix4x4Extensions.cs` | `CreateTRS`, `CreateLookAt`, перспективная и ортографическая проекции с диапазоном `[-1; 1]`, `TryInvert`, разбор `GetScale`/`GetRotation`/`GetTranslation`, `MultiplyPoint`, `MultiplyVector`, `TransformNormal` |
-| `MatrixExtensions.cs` | упаковка `Matrix4x4` в column-major для OpenGL, ортографическая проекция 2D |
-| `QuaternionExtensions.cs` | `FromEuler`/`ToEuler`, `FromAxisAngle`, `LookRotation`, `Slerp`, `AngleBetween`, `Conjugate`, `Inverse`, `Rotate` |
-| `Rect.cs` | прямоугольник с операциями над множеством: пересечение, объединение, отступы, масштаб, поворот |
-| `RectU.cs` | прямоугольник в целых пикселях с включёнными границами, регион атласа |
-| `Aabb2.cs`, `Aabb3.cs` | осевые ограничивающие объёмы, `FromPoints`, `ClosestPoint`, `DistanceTo`, `Union`, `Expand`, углы |
-| `Circle2.cs`, `Segment2.cs`, `Capsule2.cs`, `Capsule3.cs` | примитивы форм с проверками принадлежности и ближайшими точками |
-| `Ray2.cs`, `Ray3.cs` | луч с пересечениями по AABB, кругу, отрезку, сфере, капсуле и плоскости |
-| `Plane3.cs` | плоскость с единичной нормалью, знаковое расстояние, проекция |
-| `BoundingSphere.cs` | ограничивающая сфера, `FromAabb`, `FromPoints`, `Union`, расстояние и ближайшая точка |
-| `Frustum.cs` | шесть плоскостей отсечения из `view * projection`, проверки видимости, пакетный `CountVisible` по массиву сфер и по массивам координат |
-| `Collision.cs` | SAT для повёрнутых прямоугольников, расстояние между отрезками, пересечение капсул, принадлежность точке |
-| `Interpolation.cs` | `Lerp`, `InverseLerp`, `MoveTowards`, `Damp`, `SmoothDamp`, `Repeat`, `PingPong`, `Remap`, `RemapUnclamped` |
-| `Curves.cs` | кривые ускорения (quad, cubic, sine, expo, back, elastic, bounce), кривые Безье |
-| `Rgba32.cs` | цвет RGBA, разбор `#RRGGBBAA`, преобразование в вектор uniform |
-| `TexelDensity.cs` | единая плотность текстуры, число повторов по размеру поверхности |
-| `Random/IRandomSource.cs` | интерфейс источника случайности |
-| `Random/XorShift64Star.cs` | детерминированный быстрый генератор |
-| `Random/RandomExtensions.cs` | `NextRange`, `NextSymmetric`, `NextDirection`, `NextInsideUnitCircle`, `NextItem`, `NextWeightedIndex`, `NextAngle` |
-| `Serialization/` | JSON-конвертеры для `Vector2/3/4`, `Angle`, `Rgba32` и общий разбор массивов чисел |
+| `Scalar/` | `Scalar.cs` — `Epsilon`, `Sign`, `IsNearlyZero`, `IsNearlyEqual`, `Snap`, `Clamp`, перевод градусов и радиан; `Angle.cs` — угол с нормализацией в `(−π; π]`, интерполяция по кратчайшей дуге, поворот вектора, `MoveTowards`; `Trig.cs` — фасад трансцендентных функций, два варианта сборки выбираются компиляцией; `DeterministicMath.cs` — многочлены вместо `MathF` для побитовой воспроизводимости |
+| `Vector/` | `VectorExtensions.cs` — операции поверх `Vector2`: `FromPolar`, `Rotate`, `WithDirection`, `Perpendicular`, `ToAngle`, `SafeNormalize`, `Project`, `MoveTowards`; `Vector3Extensions.cs` — `RotateAround`, `ToAngle`, `SignedAngleAround`, `Perpendicular`, `FromSpherical`, проекции на плоскость |
+| `Transform/` | `Matrix3x2Extensions.cs` — `CreateTransform` (позиция, угол, масштаб, опорная точка), разбор матрицы, `TryInvert`, `ToMatrix4x4`; `Matrix4x4Extensions.cs` — `CreateTRS`, `CreateLookAt`, перспективная и ортографическая проекции с диапазоном `[-1; 1]`, `TryInvert`, `GetScale`/`GetRotation`/`GetTranslation`, `MultiplyPoint`, `MultiplyVector`, `TransformNormal`; `MatrixExtensions.cs` — упаковка в column-major для OpenGL, ортографическая проекция 2D; `QuaternionExtensions.cs` — `FromEuler`/`ToEuler`, `FromAxisAngle`, `LookRotation`, `Slerp`, `AngleBetween`, `Conjugate`, `Inverse`, `Rotate` |
+| `Shapes2D/` | `Rect.cs` — прямоугольник с операциями над множеством: пересечение, объединение, отступы, масштаб, поворот; `RectU.cs` — прямоугольник в целых пикселях с включёнными границами, регион атласа; `Aabb2.cs` — осевой ограничивающий объём, `FromPoints`, `ClosestPoint`, `DistanceTo`, `Union`, `Expand`, углы; `Circle2.cs`, `Segment2.cs`, `Capsule2.cs` — примитивы форм с проверками принадлежности и ближайшими точками |
+| `Shapes3D/` | `Aabb3.cs` — осевой ограничивающий объём; `BoundingSphere.cs` — `FromAabb`, `FromPoints`, `Union`, расстояние и ближайшая точка; `Capsule3.cs`, `Plane3.cs` — примитивы форм, плоскость с единичной нормалью, знаковое расстояние, проекция |
+| `Ray/` | `Ray2.cs`, `Ray3.cs` — луч с пересечениями по AABB, кругу, отрезку, сфере, капсуле и плоскости |
+| `Queries/` | `Frustum.cs` — шесть плоскостей отсечения из `view * projection`, проверки видимости, пакетный `CountVisible` по массиву сфер и по массивам координат; `Collision.cs` — SAT для повёрнутых прямоугольников, расстояние между отрезками, пересечение капсул, принадлежность точке |
+| `Interpolation/` | `Interpolation.cs` — `Lerp`, `InverseLerp`, `MoveTowards`, `Damp`, `SmoothDamp`, `Repeat`, `PingPong`, `Remap`, `RemapUnclamped`; `Curves.cs` — кривые ускорения (quad, cubic, sine, expo, back, elastic, bounce), кривые Безье |
+| `Graphics/` | `Rgba32.cs` — цвет RGBA, разбор `#RRGGBBAA`, преобразование в вектор uniform; `TexelDensity.cs` — единая плотность текстуры, число повторов по размеру поверхности |
+| `Random/` | `IRandomSource.cs` — интерфейс источника случайности; `XorShift64Star.cs` — детерминированный быстрый генератор; `RandomExtensions.cs` — `NextRange`, `NextSymmetric`, `NextDirection`, `NextInsideUnitCircle`, `NextItem`, `NextWeightedIndex`, `NextAngle` |
+| `Serialization/` | `JsonConverters.cs` — конвертеры для `Vector2/3/4`, `Angle`, `Rgba32`; `JsonArrayReaderHelper.cs` — общий разбор массивов чисел |
+| `Internal/` | `SurfaceRadius.cs` — служебный расчёт радиуса для точки поверхности; не публикуется наружу |
 
 ## Правила
 
