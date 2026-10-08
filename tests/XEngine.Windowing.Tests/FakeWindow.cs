@@ -87,6 +87,27 @@ internal sealed class FakeWindow : IWindow
     public int PollCount { get; private set; }
 
     /// <summary>
+    /// Сколько раз показывался кадр.
+    /// </summary>
+    public int PresentCount { get; private set; }
+
+    /// <summary>
+    /// Что происходит при показе кадра: по умолчанию только считает.
+    /// </summary>
+    /// <remarks>
+    /// Задаётся тестом, которому важен порядок событий кадра: без него
+    /// порядок «отрисовка, потом показ» проверять нечем.
+    /// </remarks>
+    public Action? OnPresent { get; set; }
+
+    /// <inheritdoc/>
+    public void Present()
+    {
+        PresentCount++;
+        OnPresent?.Invoke();
+    }
+
+    /// <summary>
     /// Сколько раз освобождалось окно.
     /// </summary>
     public int DisposeCount { get; private set; }

@@ -293,6 +293,55 @@ public sealed class FrameLoopTests
     }
 
     [Fact]
+    public void Run_PresentsFrameOncePerFrame()
+    {
+        // Без показа кадра окно не обновляется, а частота кадров не ограничена
+        // ничем, кроме скорости опроса событий. Проверено измерением: без
+        // показа цикл выполняет двадцать тысяч кадров в секунду.
+        FakeWindow window = new();
+        RecordingTarget target = new(window, [], closeAfterFrames: 5);
+        FrameLoop loop = CreateLoop(window, new ManualFrameClock(), new SimulationConfig(), out FixedStepper stepper);
+
+        loop.Run(target);
+
+        Assert.Equal(5, window.PollCount);
+        Assert.Equal(5, window.PresentCount);
+    }
+
+    [Fact]
+    public void Run_PresentsFrameEvenWithoutSimulationSteps()
+    {
+        FakeWindow window = new();
+        ManualFrameClock clock = new();
+        RecordingTarget target = new(window, [], closeAfterFrames: 3);
+        FrameLoop loop = CreateLoop(
+            window,
+            clock,
+            new SimulationConfig { TimeStepSeconds = 1.0 },
+            out FixedStepper stepper);
+
+        loop.Run(target);
+
+        Assert.Equal(0, stepper.StepCount);
+        Assert.Equal(3, window.PresentCount);
+    }
+
+    [Fact]
+    public void Run_PresentsAfterRenderOfSameFrame()
+    {
+        // Кадр показывается после отрисовки: показанный кадр обязан быть тем
+        // же, что нарисован сейчас, иначе пользователь видит результат шага
+        // симуляции на кадр позже, чем он рассчитан.
+        List<string> order = [];
+        FakeWindow window = new() { OnPresent = () => order.Add("показ") };
+        FrameLoop loop = CreateLoop(window, new ManualFrameClock(), new SimulationConfig(), out FixedStepper stepper);
+
+        loop.Run(new OrderTarget(order, window));
+
+        Assert.Equal(["кадр", "показ"], order);
+    }
+
+    [Fact]
     public void Constructor_RejectsMissingArguments()
     {
         FakeWindow window = new();
@@ -313,6 +362,22 @@ public sealed class FrameLoopTests
             new FixedStepper(new SimulationConfig(), new CollectingLogSink()));
 
         Assert.Throws<ArgumentNullException>(() => loop.Run(null!));
+    }
+
+    /// <summary>
+    /// Заглушка цели, которая пишет порядок отрисовки и закрывает окно после
+    /// первого кадра: иначе цикл не завершился бы и писал бы в список без
+    /// конца.
+    /// </summary>
+    private sealed class OrderTarget(List<string> order, FakeWindow window) : IFrameLoopTarget
+    {
+        public void Simulate(double stepSeconds, int stepNumber) => order.Add("шаг");
+
+        public void Render(in FrameContext context)
+        {
+            order.Add("кадр");
+            window.SimulateUserClose();
+        }
     }
 
     /// <summary>
