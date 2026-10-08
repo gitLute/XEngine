@@ -371,17 +371,18 @@ public class GuardAndEdgeCaseTests
     }
 
     /// <summary>
-    /// Параллелепипед из одного значения вырожден в точку и не пуст.
+    /// Параллелепипед из одной точки не пуст: равенства границ это вырожденный
+    /// объём, а не пустое множество.
     /// </summary>
     [Fact]
-    public void Aabb_FromSingleValue_IsPointNotEmpty()
+    public void Aabb_FromSinglePoint_IsPointNotEmpty()
     {
-        Aabb2 point2 = new(3f);
+        Aabb2 point2 = new(P2(3, 3), P2(3, 3));
         MathAssert.Equal(P2(3, 3), point2.Min, Tolerance);
         MathAssert.Equal(P2(3, 3), point2.Max, Tolerance);
         Assert.False(point2.IsEmpty, "Точка не должна считаться пустым параллелепипедом.");
 
-        Aabb3 point3 = new(P(1, 2, 3));
+        Aabb3 point3 = new(P(1, 2, 3), P(1, 2, 3));
         MathAssert.Equal(P(1, 2, 3), point3.Min, Tolerance);
         MathAssert.Equal(P(1, 2, 3), point3.Max, Tolerance);
         Assert.False(point3.IsEmpty, "Точка не должна считаться пустым параллелепипедом.");

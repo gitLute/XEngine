@@ -160,13 +160,13 @@ public sealed class Shape3DTests
     }
 
     [Fact]
-    public void BoundingSphere_DistanceToAndInnerRadius()
+    public void BoundingSphere_DistanceToCoversInnerAndOuterPoints()
     {
         BoundingSphere sphere = new(new Vector3(0f, 0f, 0f), 2f);
 
         MathAssert.Equal(0f, sphere.DistanceTo(new Vector3(1f, 0f, 0f)), 1e-5f);
         MathAssert.Equal(3f, sphere.DistanceTo(new Vector3(5f, 0f, 0f)), 1e-5f);
-        MathAssert.Equal(2f, sphere.InnerRadius, 1e-5f);
+        MathAssert.Equal(4f, sphere.Diameter, 1e-5f);
     }
 
     [Fact]

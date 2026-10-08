@@ -627,4 +627,105 @@ public class NumericRobustnessTests
 
         Assert.Equal(expected, Frustum.CountVisible(frustum, spheres));
     }
+
+    /// <summary>
+    /// Тригонометрия не уходит в бесконечность и остаётся согласованной с собой
+    /// на всём диапазоне float, включая аргументы, где эталон недоступен.
+    /// </summary>
+    /// <remarks>
+    /// Отдельная проверка нужна потому, что точность убывает с ростом аргумента
+    /// не из-за формулы, а сама по себе: у числа порядка 2^32 последний разряд
+    /// двойной точности сравним с <c>π</c>, то есть все значащие цифры остатка
+    /// физически не помещаются в исходном числе. Сверяться с эталоном там
+    /// бессмысленно, и единственное свойство, которое ещё можно требовать, —
+    /// результат конечен и согласован с собой: <c>sin² + cos² = 1</c>.
+    /// <para>
+    /// Собственная константа 2π в одинарной точности не годится: на больших
+    /// аргументах её разряд уже сравним с самим числом оборотов. Поэтому
+    /// сравнение ведётся с двойной точностью, где остаток вычисляется точно.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Trig_StaysFiniteAndConsistentAcrossWholeFloatRange()
+    {
+        float[] magnitudes =
+        [
+            0f, 1e-30f, 1f, 1000f, 1e6f, 1e9f, 1e10f, 1e15f, 1e18f, 1e30f, float.MaxValue,
+        ];
+
+        foreach (float magnitude in magnitudes)
+        {
+            foreach (float sign in new[] { 1f, -1f })
+            {
+                float x = magnitude * sign;
+                (float sin, float cos) = Trig.SinCos(x);
+
+                Assert.True(float.IsFinite(sin), $"Синус при x={x:E1} не конечен: {sin}.");
+                Assert.True(float.IsFinite(cos), $"Косинус при x={x:E1} не конечен: {cos}.");
+                Assert.True(MathF.Abs(sin) <= 1f, $"Синус при x={x:E1} вне отрезка [-1; 1]: {sin}.");
+                Assert.True(MathF.Abs(cos) <= 1f, $"Косинус при x={x:E1} вне отрезка [-1; 1]: {cos}.");
+
+                double identity = ((double)sin * sin) + ((double)cos * cos);
+                Assert.True(Math.Abs(identity - 1.0) < 1e-6, $"sin² + cos² = {identity:F9} при x={x:E1}.");
+
+                Assert.True(sin == Trig.Sin(x), $"Sin разошёлся с SinCos при x={x:E1}.");
+                Assert.True(cos == Trig.Cos(x), $"Cos разошёлся с SinCos при x={x:E1}.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// На всём диапазоне, где приведение к квадранту ещё корректно, результат
+    /// совпадает с двойной точностью в пределах округления float.
+    /// </summary>
+    /// <remarks>
+    /// Полоса задана по измерению, а не по теории: на 200 000 точек худшая
+    /// абсолютная ошибка оказалась 9.1e-8 и не росла с аргументом, то есть
+    /// определяется финальным округлением float, а не приведением. Относительная
+    /// мера не годится: у синуса вблизи нуля знаменатель стремится к нулю и
+    /// ошибка взлетает, хотя абсолютная остаётся ничтожной. Поэтому сравнение
+    /// только абсолютное.
+    /// <para>
+    /// Граница 2^24 — это порядок величины float: за ней приведение перестаёт
+    /// быть корректным, и сверка с эталоном теряет смысл (см. предыдущий тест,
+    /// где на всём диапазоне требуется лишь конечность и согласованность).
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void SinCos_MatchesDoublePrecisionOverUsableRange()
+    {
+        DeterministicRandom random = new(0x1F2E3D4C5B6A7988UL);
+        const float Limit = 1 << 24;
+        const double Band = 3e-7;
+
+        for (int i = 0; i < 200000; i++)
+        {
+            float x = random.Range(-Limit, Limit);
+            (float sin, float cos) = Trig.SinCos(x);
+
+            Assert.True(
+                Math.Abs((double)sin - Math.Sin(x)) <= Band,
+                $"Синус {sin} против {Math.Sin(x):R} расходится на {Math.Abs((double)sin - Math.Sin(x)):E3} при x={x:R}.");
+            Assert.True(
+                Math.Abs((double)cos - Math.Cos(x)) <= Band,
+                $"Косинус {cos} против {Math.Cos(x):R} расходится на {Math.Abs((double)cos - Math.Cos(x)):E3} при x={x:R}.");
+        }
+    }
+
+    /// <summary>
+    /// Нечисловые и бесконечные аргументы ведут себя как в эталоне.
+    /// </summary>
+    [Fact]
+    public void Trig_PropagatesNonFiniteArguments()
+    {
+        Assert.Equal(float.NaN, Trig.Sin(float.NaN));
+        Assert.Equal(float.NaN, Trig.Cos(float.NaN));
+        Assert.Equal(float.NaN, Trig.Sin(float.PositiveInfinity));
+        Assert.Equal(float.NaN, Trig.Sin(float.NegativeInfinity));
+
+        // Знак нуля различается: sin(−0) = −0, и это различие наблюдаемо.
+        Assert.True(
+            BitConverter.SingleToInt32Bits(-0f) == BitConverter.SingleToInt32Bits(Trig.Sin(-0f)),
+            "Sin(-0) обязан вернуть -0, а не +0.");
+    }
 }

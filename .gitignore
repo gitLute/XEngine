@@ -383,3 +383,7 @@ img/
 # Результат tools/AtlasBuilder (14.2): файлы собираются, вручную не правятся.
 assets/textures/atlas.png
 assets/textures/atlas.json
+
+# Файлы проекта KDevelop, которыми открывается решение
+*.kdev4
+.kdev4/

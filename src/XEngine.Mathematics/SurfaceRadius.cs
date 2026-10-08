@@ -47,13 +47,7 @@ internal static class SurfaceRadius
     /// </param>
     /// <returns>Радиус для вычисления точки поверхности.</returns>
     public static float For(float radius, in Vector3 basePoint)
-    {
-        float magnitude = MathF.Max(
-            MathF.Max(MathF.Abs(basePoint.X), MathF.Abs(basePoint.Y)),
-            MathF.Abs(basePoint.Z));
-
-        return Shrink(radius, magnitude);
-    }
+        => Shrink(radius, Magnitude(basePoint));
 
     /// <summary>
     /// Двумерный вариант того же расчёта.
@@ -66,6 +60,47 @@ internal static class SurfaceRadius
         float magnitude = MathF.Max(MathF.Abs(basePoint.X), MathF.Abs(basePoint.Y));
         return Shrink(radius, magnitude);
     }
+
+    /// <summary>
+    /// Расстояние, немного превышающее расстояние до первого касания, чтобы
+    /// точка, построенная по нему лучом, лежала строго внутри фигуры.
+    /// </summary>
+    /// <param name="distance">Расстояние до первого касания.</param>
+    /// <param name="origin">Начало луча.</param>
+    /// <returns>Расстояние, ведущее внутрь фигуры.</returns>
+    /// <remarks>
+    /// Расстояние до касания по построению кладёт точку ровно на поверхность,
+    /// а проверка принадлежности строгая: измеренный выход точки наружу достигает
+    /// 2.3e-5 метра при радиусе 0.22 метра, то есть примерно сотня последних
+    /// разрядов. Вызывающий, который строит точку по расстоянию и сразу
+    /// проверяет её, получает отказ на верном попадании.
+    /// <para>
+    /// Сдвиг идёт ВПЕРЁД по лучу, а не назад: расстояние до касания — это
+    /// первое касание, и всё, что лежит между началом луча и ним, снаружи.
+    /// Уменьшение расстояния на микроскопическую величину даёт отказ
+    /// практически на каждом попадании — проверено измерением.
+    /// </para>
+    /// <para>
+    /// Начало луча внутри фигуры расстояние не меняет: там точка входа и так
+    /// строго внутри, а сдвиг увеличил бы её произвольно.
+    /// </para>
+    /// </remarks>
+    public static float PastContact(float distance, in Vector3 origin)
+    {
+        if (distance <= 0f)
+        {
+            return distance;
+        }
+
+        // Точка на расстоянии distance от начала имеет величину не больше суммы
+        // величин, а сумма нужна потому, что ошибку округления задаёт наибольшая
+        // из координат результата, а не самого начала.
+        float magnitude = distance + Magnitude(origin);
+        return distance + (MathF.Max(distance, magnitude) * Shift * 1.1920929e-7f);
+    }
+
+    private static float Magnitude(in Vector3 point)
+        => MathF.Max(MathF.Max(MathF.Abs(point.X), MathF.Abs(point.Y)), MathF.Abs(point.Z));
 
     private static float Shrink(float radius, float magnitude)
     {

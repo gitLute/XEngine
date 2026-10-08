@@ -33,17 +33,6 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     private readonly struct EmptyMarker;
 
     /// <summary>
-    /// Создаёт вырожденный AABB в точке бесконечности: такой прямоугольник пуст
-    /// и используется как начальное значение при поиске границ.
-    /// </summary>
-    /// <param name="value">Координата точки.</param>
-    public Aabb2(float value)
-    {
-        Min = new Vector2(value, value);
-        Max = new Vector2(value, value);
-    }
-
-    /// <summary>
     /// Создаёт AABB из центра и половины размера по каждой оси.
     /// </summary>
     /// <param name="center">Центр.</param>

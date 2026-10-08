@@ -8,9 +8,7 @@ namespace XEngine.Mathematics;
 /// </summary>
 /// <remarks>
 /// Название <c>BoundingSphere</c>, а не <c>Sphere3</c>: сфера нужна как
-/// ограничивающий объём, и «граница» точнее описывает её роль (6.4). Из неё
-/// выводится <see cref="InnerRadius"/> — радиус, гарантированно лежащий внутри
-/// объёма.
+/// ограничивающий объём, и «граница» точнее описывает её роль (6.4).
 /// </remarks>
 public readonly struct BoundingSphere : IEquatable<BoundingSphere>
 {
@@ -70,12 +68,6 @@ public readonly struct BoundingSphere : IEquatable<BoundingSphere>
     /// Диаметр сферы.
     /// </summary>
     public float Diameter => Radius * 2f;
-
-    /// <summary>
-    /// Радиус, гарантированно лежащий внутри сферы: на таком расстоянии от
-    /// центра объём виден с любого направления.
-    /// </summary>
-    public float InnerRadius => Radius;
 
     /// <summary>
     /// Параллелепипед, описанный вокруг сферы.

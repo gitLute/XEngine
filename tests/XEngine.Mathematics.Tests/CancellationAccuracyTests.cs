@@ -276,4 +276,90 @@ public class CancellationAccuracyTests
             MathF.Abs(belowNegative - aboveNegative) <= 1e-6f,
             $"На границе ветвей разрыв {MathF.Abs(belowNegative - aboveNegative):E3}.");
     }
+
+    /// <summary>
+    /// Точность детерминированного backend в последних разрядах float.
+    /// </summary>
+    /// <remarks>
+    /// Эталон — <c>(float)Math.X</c>, то есть сужение корректно посчитанного
+    /// значения двойной точности. Расхождение считается в единицах последнего
+    /// разряда самого результата, а не в процентах: проценты у функции,
+    /// проходящей через ноль, не имеют смысла.
+    /// <para>
+    /// Полосы взяты измерением, а не правдоподобием. У функций разные полосы
+    /// по одной причине: у каждой своя многочленная свёртка и своя длина
+    /// цепочки округлений. Занижать их до красивых чисел значит запретить
+    /// себе улучшать свёртку — тест перестанет ловить регресс.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void DeterministicBackend_StaysWithinMeasuredLastDigits()
+    {
+        DeterministicRandom random = new(0x2B3C4D5E6F708192UL);
+
+        double worstAsin = 0.0;
+        double worstAcos = 0.0;
+        double worstAtan2 = 0.0;
+        float worstAtanArgument = 0f;
+        float worstAtanOther = 0f;
+
+        for (int i = 0; i < 200000; i++)
+        {
+            float value = random.Range(-1f, 1f);
+            if (MathF.Abs(value) < 1e-6f)
+            {
+                continue;
+            }
+
+            worstAsin = Math.Max(worstAsin, LastDigits(Trig.Asin(value), Math.Asin(value)));
+            worstAcos = Math.Max(worstAcos, LastDigits(Trig.Acos(value), Math.Acos(value)));
+
+            float y = random.Range(-50f, 50f);
+            float x = random.Range(-50f, 50f);
+            double digits = LastDigits(Trig.Atan2(y, x), Math.Atan2(y, x));
+            if (digits > worstAtan2)
+            {
+                worstAtan2 = digits;
+                worstAtanArgument = y;
+                worstAtanOther = x;
+            }
+        }
+
+        Assert.True(worstAsin <= 2.0, $"Asin расходится на {worstAsin:F2} последнего разряда.");
+        // У Acos полоса шире: результат у самой единицы стремится к нулю, а в
+        // него входит квадратный корень из произведения двух множителей, и его
+        // относительная ошибка около 1.2e-7 переходит в относительную же ошибку
+        // результата. Измерено 2.09, полоса 3.
+        Assert.True(worstAcos <= 3.0, $"Acos расходится на {worstAcos:F2} последнего разряда.");
+        Assert.True(
+            worstAtan2 <= 3.0,
+            $"Atan2 расходится на {worstAtan2:F2} последнего разряда при ({worstAtanArgument}, {worstAtanOther}).");
+    }
+
+    /// <summary>
+    /// Расхождение с эталоном в единицах последнего разряда результата.
+    /// </summary>
+    /// <param name="actual">Полученное значение.</param>
+    /// <param name="reference">Значение двойной точности.</param>
+    /// <returns>Число последних разрядов расхождения.</returns>
+    private static double LastDigits(float actual, double reference)
+    {
+        if (actual == reference)
+        {
+            return 0.0;
+        }
+
+        if (double.IsNaN(reference))
+        {
+            return double.PositiveInfinity;
+        }
+
+        if (reference == 0.0)
+        {
+            return Math.Abs(actual);
+        }
+
+        double step = Math.ScaleB(Math.Abs((float)reference), -23);
+        return Math.Abs((double)actual - reference) / step;
+    }
 }

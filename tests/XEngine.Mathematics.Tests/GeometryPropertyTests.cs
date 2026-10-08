@@ -177,7 +177,7 @@ public class GeometryPropertyTests
 
             bool actual = ray.Intersects(sphere);
 
-            double originDistance = Math.Sqrt(ReferenceGeometry.Distance(ray.Origin, center));
+            double originDistance = ReferenceGeometry.Distance(ray.Origin, center);
 
             // Полоса касания: пока расстояние наибольшего сближения сравнимо с
             // радиусом, вердикт решает округление, и спорить о нём нельзя.
@@ -522,7 +522,7 @@ public class GeometryPropertyTests
             // ближайшая к началу точка осевой линии может лежать с другой
             // стороны, чем весь остальной отрезок. Направление луча поэтому
             // для отсечения не используется.
-            double gap = Math.Sqrt(ReferenceGeometry.Distance(center, ReferenceGeometry.ClosestPointOnSegment(center, a, b))) - capsuleRadius;
+            double gap = ReferenceGeometry.Distance(center, ReferenceGeometry.ClosestPointOnSegment(center, a, b)) - capsuleRadius;
             _ = compared;
 
             if (!ray.Intersects(capsule))

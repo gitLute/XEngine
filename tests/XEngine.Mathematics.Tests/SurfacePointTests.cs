@@ -217,4 +217,152 @@ public class SurfacePointTests
         Circle2 circle = new(Vector2.Zero, 2f);
         Assert.True(circle.Contains(circle.ClosestPointOnBoundary(Vector2.Zero)));
     }
+
+    /// <summary>
+    /// Расстояние, сообщаемое лучом, ведёт в точку, которую принимает проверка
+    /// принадлежности той же фигуре.
+    /// </summary>
+    /// <remarks>
+    /// Расстояние до касания по построению кладёт точку ровно на поверхность, а
+    /// проверка строгая, поэтому на верном попадании она иногда отвечает отказом.
+    /// </remarks>
+    [Fact]
+    public void RaycastEntry_IsAcceptedByContainsOfSameFigure()
+    {
+        DeterministicRandom random = new(0x6B7C8D9EAF001122UL);
+        int sphereHits = 0;
+        int boxHits = 0;
+        int capsuleHits = 0;
+        int rejected = 0;
+        int tangentCount = 0;
+        int rejectedBeyondRounding = 0;
+        double worstExcess = 0.0;
+        string worstCase = string.Empty;
+
+        for (int i = 0; i < 100000; i++)
+        {
+            Vector3 origin = RandomPoint(random, 8f);
+            Vector3 direction = random.NextUnitVector();
+            Ray3 ray = new(origin, direction);
+
+            BoundingSphere sphere = new(RandomPoint(random, 8f), random.Range(0.05f, 3f));
+            if (ray.Raycast(sphere, out float sphereDistance))
+            {
+                sphereHits++;
+                Vector3 point = ray.GetPoint(sphereDistance);
+                if (sphere.Contains(point))
+                {
+                    continue;
+                }
+
+                rejected++;
+                double excess = ReferenceGeometry.Distance(point, sphere.Center) - sphere.Radius;
+                if (excess > worstExcess)
+                {
+                    worstExcess = excess;
+                    worstCase = $"сфера r={sphere.Radius:F6} c={sphere.Center} origin={origin} dir={direction} d={sphereDistance:R} p={point}";
+                }
+                Classify(excess, ref tangentCount, ref rejectedBeyondRounding);
+            }
+
+            Aabb3 box = Aabb3.FromCenterAndSize(RandomPoint(random, 6f), new Vector3(
+                random.Range(0.05f, 4f),
+                random.Range(0.05f, 4f),
+                random.Range(0.05f, 4f)));
+            if (ray.Raycast(box, out float boxDistance))
+            {
+                boxHits++;
+                Vector3 point = ray.GetPoint(boxDistance);
+                if (box.Contains(point))
+                {
+                    continue;
+                }
+
+                rejected++;
+                double outside = MathF.Max(
+                    MathF.Max(box.Min.X - point.X, point.X - box.Max.X),
+                    MathF.Max(box.Min.Y - point.Y, point.Y - box.Max.Y));
+                if (outside > worstExcess)
+                {
+                    worstExcess = outside;
+                    worstCase = $"бокс {box} origin={origin} dir={direction} d={boxDistance:R} p={point}";
+                }
+                Classify(outside, ref tangentCount, ref rejectedBeyondRounding);
+            }
+
+            Capsule3 capsule = new(RandomPoint(random, 5f), RandomPoint(random, 5f), random.Range(0.05f, 2f));
+            if (ray.Raycast(capsule, out float capsuleDistance))
+            {
+                capsuleHits++;
+                Vector3 point = ray.GetPoint(capsuleDistance);
+                if (capsule.Contains(point))
+                {
+                    continue;
+                }
+
+                rejected++;
+                Vector3 nearest = ReferenceGeometry.ClosestPointOnSegment(point, capsule.PointA, capsule.PointB);
+                double excess = ReferenceGeometry.Distance(point, nearest) - capsule.Radius;
+                if (excess > worstExcess)
+                {
+                    worstExcess = excess;
+                    worstCase = $"капсула r={capsule.Radius:R} A={capsule.PointA} B={capsule.PointB}"
+                        + $" origin={origin} dir={direction} d={capsuleDistance:R} p={point}";
+                }
+                Classify(excess, ref tangentCount, ref rejectedBeyondRounding);
+            }
+        }
+
+        Assert.True(sphereHits > 1000, $"Слишком мало попаданий в сферу: {sphereHits}.");
+        Assert.True(boxHits > 1000, $"Слишком мало попаданий в параллелепипед: {boxHits}.");
+        Assert.True(capsuleHits > 1000, $"Слишком мало попаданий в капсулу: {capsuleHits}.");
+
+        // Что именно гарантируется. Точка входа обязана лежать внутри фигуры,
+        // кроме одного случая: луч, проходящий по касательной. Там касание
+        // двойное, и точка входа лежит ровно на поверхности, а строгая проверка
+        // решает по округлению — построить строго внутреннюю точку сдвигом по
+        // лучу невозможно в принципе, движение от касательной удаляет от
+        // поверхности. Поэтому утверждение не «всегда внутри», а «либо внутри,
+        // либо на поверхности с точностью до округления».
+        //
+        // Порог в 1e-5 метра — это около сотни последних разрядов координаты на
+        // расстоянии в десятки метров, то есть величина самого округления.
+        // Отдельной проверки на касательные лучи здесь нет: их доля мала, а
+        // искусственно подгонять геометрию под них значило бы проверять не
+        // код, а собственную настройку теста.
+        Assert.True(
+            rejectedBeyondRounding == 0,
+            $"Точка входа выходит за поверхность заметно: {rejectedBeyondRounding} раз из "
+            + $"{sphereHits + boxHits + capsuleHits} попаданий, худший выход {worstExcess:E3} м. {worstCase}");
+
+        Assert.True(
+            tangentCount < 50,
+            $"Слишком много касательных: {tangentCount}. Почти все попадания должны давать внутреннюю точку.");
+        // Расстояние при старте внутри остаётся нулём: точка входа тогда и так
+        // строго внутри, а сдвигать её произвольно незачем.
+        BoundingSphere inner = new(RandomPoint(random, 4f), 1.5f);
+        Assert.True(new Ray3(inner.Center, random.NextUnitVector()).Raycast(inner, out float zero));
+        MathAssert.Equal(0f, zero, 1e-6f);
+    }
+
+    /// <summary>
+    /// Разделяет отказы на касательные и настоящие: выход в пределах округления
+    /// означает, что луч шёл по касательной и построить внутреннюю точку нельзя.
+    /// </summary>
+    /// <param name="excess">Выход точки за поверхность.</param>
+    /// <param name="tangent">Счётчик касательных.</param>
+    /// <param name="beyond">Счётчик настоящих выходов.</param>
+    private static void Classify(double excess, ref int tangent, ref int beyond)
+    {
+        if (excess > 1e-5)
+        {
+            beyond++;
+            return;
+        }
+
+        tangent++;
+    }
+
+    private static Vector3 RandomPoint(DeterministicRandom random, float limit)
+        => new Vector3(random.Range(-limit, limit), random.Range(-limit, limit), random.Range(-limit, limit));
 }
