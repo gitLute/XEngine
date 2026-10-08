@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace XEngine.Mathematics;
 
@@ -164,66 +165,68 @@ public readonly struct Ray3 : IEquatable<Ray3>
         Vector3 origin = Origin;
         Vector3 direction = Direction;
 
-        for (int axis = 0; axis < 3; axis++)
+        // Оси развёрнуты, а не перебираются: цикл из трёх итераций с выбором
+        // компоненты по индексу компилятор не разворачивает надёжно, а запрос
+        // луча идёт на каждый объект при каждом движении. Порядок осей значения
+        // не имеет, потому что отрезок параметров пересекается пересечением.
+        if (!Clip(origin.X, direction.X, bounds.Min.X, bounds.Max.X, ref min, ref max))
         {
-            float component = axis switch
-            {
-                0 => origin.X,
-                1 => origin.Y,
-                _ => origin.Z,
-            };
+            distance = 0f;
+            return false;
+        }
 
-            float step = axis switch
-            {
-                0 => direction.X,
-                1 => direction.Y,
-                _ => direction.Z,
-            };
+        if (!Clip(origin.Y, direction.Y, bounds.Min.Y, bounds.Max.Y, ref min, ref max))
+        {
+            distance = 0f;
+            return false;
+        }
 
-            float lower = axis switch
-            {
-                0 => bounds.Min.X,
-                1 => bounds.Min.Y,
-                _ => bounds.Min.Z,
-            };
-
-            float upper = axis switch
-            {
-                0 => bounds.Max.X,
-                1 => bounds.Max.Y,
-                _ => bounds.Max.Z,
-            };
-
-            if (MathF.Abs(step) <= Scalar.Epsilon)
-            {
-                if (component < lower || component > upper)
-                {
-                    distance = 0f;
-                    return false;
-                }
-
-                continue;
-            }
-
-            float inverse = 1f / step;
-            float first = (lower - component) * inverse;
-            float second = (upper - component) * inverse;
-            if (first > second)
-            {
-                (first, second) = (second, first);
-            }
-
-            min = MathF.Max(min, first);
-            max = MathF.Min(max, second);
-            if (min > max)
-            {
-                distance = 0f;
-                return false;
-            }
+        if (!Clip(origin.Z, direction.Z, bounds.Min.Z, bounds.Max.Z, ref min, ref max))
+        {
+            distance = 0f;
+            return false;
         }
 
         distance = min;
         return true;
+    }
+
+    /// <summary>
+    /// Ограничивает интервал входа и выхода отрезком параметров по одной оси.
+    /// </summary>
+    /// <param name="origin">Координата начала луча по этой оси.</param>
+    /// <param name="step">Компонента направления по этой оси; длина направления равна единице.</param>
+    /// <param name="lower">Нижняя граница объёма.</param>
+    /// <param name="upper">Верхняя граница объёма.</param>
+    /// <param name="min">Текущее начало интервала входа.</param>
+    /// <param name="max">Текущий конец интервала выхода.</param>
+    /// <returns><c>false</c>, если после этой оси интервал пуст.</returns>
+    /// <remarks>
+    /// Порог сравнивается с длиной, а не с площадью: компонента направления у
+    /// нормализованного вектора безразмерна, и сравнение с
+    /// <see cref="Scalar.Epsilon"/> означает «отклонение меньше микрорадиана».
+    /// Нулевая компонента обрабатывается отдельно: луч вдоль этой оси не
+    /// пересекает грани и попадает внутрь, только если лежит между границами.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool Clip(float origin, float step, float lower, float upper, ref float min, ref float max)
+    {
+        if (MathF.Abs(step) <= Scalar.Epsilon)
+        {
+            return origin >= lower && origin <= upper;
+        }
+
+        float inverse = 1f / step;
+        float first = (lower - origin) * inverse;
+        float second = (upper - origin) * inverse;
+        if (first > second)
+        {
+            (first, second) = (second, first);
+        }
+
+        min = MathF.Max(min, first);
+        max = MathF.Min(max, second);
+        return min <= max;
     }
 
     private bool IntersectsSphere(in BoundingSphere sphere, out float distance)

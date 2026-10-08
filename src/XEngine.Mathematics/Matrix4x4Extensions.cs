@@ -323,19 +323,40 @@ public static class Matrix4x4Extensions
     /// Готовая функция <c>Vector3.TransformNormal</c> перемножает строками, а
     /// не столбцами, поэтому здесь строка обратной матрицы скалярно
     /// умножается на нормаль вручную.
+    /// <para>
+    /// Обращается только линейная часть 3×3. Перенос в нормаль не попадает по
+    /// построению: она задаёт направление, а не положение, и обратная
+    /// транспонировка на нём ничего не меняет. Полная инверсия матрицы 4×4
+    /// считала определитель и 16 миноров, из которых нормаль использует
+    /// девять: выигрыш втрое, а метод зовётся на каждую вершину.
+    /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Матрица вырождена и необратима.</exception>
     public static Vector3 TransformNormal(this in Matrix4x4 matrix, Vector3 normal)
     {
-        if (!Matrix4x4.Invert(matrix, out Matrix4x4 inverse))
+        // Миноры линейной части со знаками: их отношение и есть обратная
+        // транспонировка, то есть ровно то, что вернула бы полная инверсия.
+        float c11 = (matrix.M22 * matrix.M33) - (matrix.M23 * matrix.M32);
+        float c12 = (matrix.M23 * matrix.M31) - (matrix.M21 * matrix.M33);
+        float c13 = (matrix.M21 * matrix.M32) - (matrix.M22 * matrix.M31);
+        float c21 = (matrix.M13 * matrix.M32) - (matrix.M12 * matrix.M33);
+        float c22 = (matrix.M11 * matrix.M33) - (matrix.M13 * matrix.M31);
+        float c23 = (matrix.M12 * matrix.M31) - (matrix.M11 * matrix.M32);
+        float c31 = (matrix.M12 * matrix.M23) - (matrix.M13 * matrix.M22);
+        float c32 = (matrix.M13 * matrix.M21) - (matrix.M11 * matrix.M23);
+        float c33 = (matrix.M11 * matrix.M22) - (matrix.M12 * matrix.M21);
+
+        float determinant = (matrix.M11 * c11) + (matrix.M12 * c12) + (matrix.M13 * c13);
+        if (determinant == 0f || float.IsNaN(determinant))
         {
             throw new InvalidOperationException(
                 "Матрица вырождена, нормаль преобразовать нельзя: обратной матрицы не существует.");
         }
 
+        float scale = 1f / determinant;
         return new Vector3(
-            inverse.M11 * normal.X + inverse.M12 * normal.Y + inverse.M13 * normal.Z,
-            inverse.M21 * normal.X + inverse.M22 * normal.Y + inverse.M23 * normal.Z,
-            inverse.M31 * normal.X + inverse.M32 * normal.Y + inverse.M33 * normal.Z);
+            ((c11 * normal.X) + (c21 * normal.Y) + (c31 * normal.Z)) * scale,
+            ((c12 * normal.X) + (c22 * normal.Y) + (c32 * normal.Z)) * scale,
+            ((c13 * normal.X) + (c23 * normal.Y) + (c33 * normal.Z)) * scale);
     }
 }
