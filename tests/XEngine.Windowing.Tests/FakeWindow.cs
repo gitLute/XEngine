@@ -52,6 +52,18 @@ internal sealed class FakeWindow : IWindow
     /// <inheritdoc/>
     public bool IsFocused { get; set; } = true;
 
+    /// <summary>
+    /// Что возвращает загрузчик функций графики.
+    /// </summary>
+    public IntPtr GraphicsProcedure { get; set; } = new(1);
+
+    /// <inheritdoc/>
+    public IntPtr GetGraphicsProcedure(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        return GraphicsProcedure;
+    }
+
     /// <inheritdoc/>
     public void RequestClose() => _isClosing = true;
 

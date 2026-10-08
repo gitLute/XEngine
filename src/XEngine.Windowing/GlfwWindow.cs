@@ -23,6 +23,7 @@ internal sealed class GlfwWindow : IWindow
     private readonly Silk.NET.Windowing.IWindow _window;
     private readonly ILogSink _log;
     private readonly Action<bool> _onFocusChanged;
+    private readonly Silk.NET.Core.Contexts.IGLContext _context;
     private bool _isFocused = true;
     private bool _isDisposed;
 
@@ -44,6 +45,19 @@ internal sealed class GlfwWindow : IWindow
         // создания, и окно перестанет сообщать о фокусе.
         _onFocusChanged = SetFocused;
         _window.FocusChanged += _onFocusChanged;
+
+        // Контекст берётся один раз при создании окна: обращение к свойству
+        // создаёт объект-обёртку, и искать его на каждом вызове означало бы
+        // лишние аллокации в горячем пути.
+        //
+        // Свойство помечено как nullable, хотя контекст у созданного окна есть
+        // по определению: окно без контекста бесполезно, и тихо продолжить
+        // работу с ним нельзя. Проверка обязательна и превращает в
+        // NullReferenceException в середине рисования понятный отказ сразу.
+        _context = ((Silk.NET.Core.Contexts.IGLContextSource)_window).GLContext
+            ?? throw new InvalidOperationException(
+                "У окна нет графического контекста: рисовать в нём нечем.");
+
 
         _log.Write(LogLevel.Information, $"Окно создано: {_window.Title}, размер {_window.Size}.");
     }
@@ -74,6 +88,17 @@ internal sealed class GlfwWindow : IWindow
             Silk.NET.Maths.Vector2D<int> size = _window.FramebufferSize;
             return new WindowSize(size.X, size.Y);
         }
+    }
+
+    /// <inheritdoc/>
+    public IntPtr GetGraphicsProcedure(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        // Загрузчик функций живёт в самом окне платформы: оно реализует
+        // источник контекста, и адреса функций достаются из того же контекста.
+        // Обращаться к GLFW напрямую нельзя: это обошло бы контекст окна.
+        return _context.GetProcAddress(name);
     }
 
     /// <inheritdoc/>

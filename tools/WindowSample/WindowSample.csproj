@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Проверочный пример окна: создаёт окно, выполняет кадры с очисткой и
+    завершает работу. Нужен для критерия приёмки этапа 3 и запускается вручную.
+
+    Это инструмент проверки, а не движок и не ассетная сборка, поэтому лежит в
+    tools/ рядом со сборщиком атласов (5.5). Демонстрация возможностей движка -
+    это samples/Sandbox, который появится на этапе 15 вместе с графикой.
+
+    Ссылка на XEngine.Windowing законна: проект не принадлежит слоям движка и
+    существует только для проверки.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>XEngine.Windowing.Sample</RootNamespace>
+    <AssemblyName>WindowSample</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XEngine.Windowing\XEngine.Windowing.csproj" />
+
+    <!--
+      Версия задана здесь явно, потому что каталог tools/ не входит в src/ и не
+      видит свойство SilkNetVersion. Расхождение версий Silk.NET между
+      сборками означало бы, что тип, который считали общим, таковым перестал
+      быть; при изменении версии в src/ эту строку нужно менять тоже.
+    -->
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
+  </ItemGroup>
+
+</Project>
