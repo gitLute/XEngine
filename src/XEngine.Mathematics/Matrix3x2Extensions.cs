@@ -121,15 +121,16 @@ public static class Matrix3x2Extensions
     /// <param name="matrix">Исходная матрица.</param>
     /// <param name="inverse">Обратная матрица при успехе.</param>
     /// <returns><c>true</c>, если матрица обратима.</returns>
+    /// <remarks>
+    /// Вырожденной считается только матрица с нулевым определителем, и решает это
+    /// <see cref="Matrix3x2.Invert"/>. Порога по величине определителя здесь нет
+    /// намеренно: он был абсолютным и отвергал вполне обратимые матрицы с малым
+    /// однородным масштабом, то есть результат зависел от размера мира. Так же и
+    /// ведёт себя <see cref="Matrix4x4Extensions.TryInvert"/>, и два аналога в
+    /// одной библиотеке обязаны отвечать одинаково.
+    /// </remarks>
     public static bool TryInvert(this Matrix3x2 matrix, out Matrix3x2 inverse)
     {
-        float determinant = matrix.GetDeterminant();
-        if (MathF.Abs(determinant) <= Scalar.Epsilon)
-        {
-            inverse = Matrix3x2.Identity;
-            return false;
-        }
-
         if (!Matrix3x2.Invert(matrix, out inverse))
         {
             inverse = Matrix3x2.Identity;

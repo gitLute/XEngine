@@ -458,4 +458,101 @@ public class ContractConsistencyTests
             ray.Intersects(shortSlanted),
             "Короткий отрезок под углом, целиком лежащий выше прямой луча, признан пересекающим луч.");
     }
+
+    /// <summary>
+    /// Диапазон переноса осмыслен, если его границы различаются как числа
+    /// одинарной точности.
+    /// </summary>
+    /// <remarks>
+    /// Прежний критерий сравнивал ширину диапазона с абсолютным
+    /// <c>Scalar.Epsilon</c> и отвергал всё уже 1e-6. Измерено: диапазон
+    /// <c>0 … 1e-7</c>, где ширина составляет сто процентов масштаба, и диапазон
+    /// <c>3.1415927 … 3.1415930</c> шириной в 1.4e-5 градуса отвергались наравне с
+    /// нулевым. Наглядное следствие: <c>RemapUnclamped(5e-8, 0, 1e-7, 0, 10)</c>
+    /// давал ноль вместо пяти, потому что значение ровно посередине диапазона.
+    /// <para>
+    /// У разности углов нет собственного размера, с которым её можно сравнить, —
+    /// сравнение сходно с тем, чтобы мерить углы в метрах. Поэтому критерий
+    /// различие границ, а не ширина.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Remap_AcceptsEveryRangeWhoseBoundsDiffer()
+    {
+        // Точки из измерения: каждая из них отвергалась прежним порогом.
+        (float From, float To, float Value, float Expected)[] cases =
+        [
+            (0f, 1e-7f, 5e-8f, 5f),
+            (0f, 1e-38f, 5e-39f, 5f),
+            (5f, 5.0000001f, 1f, 0f),
+            (-1f, -0.9999999f, -1f, 0f),
+            (0f, 1e-20f, 5e-21f, 5f),
+        ];
+
+        foreach ((float from, float to, float value, float expected) in cases)
+        {
+            MathAssert.Equal(
+                expected,
+                Interpolation.RemapUnclamped(value, from, to, 0f, 10f),
+                MathF.Abs(expected) * 1e-3f + 1e-4f);
+        }
+
+        // Нулевой диапазон по-прежнему вырожден, и контракт сохранён.
+        MathAssert.Equal(0f, Interpolation.Remap(1f, 5f, 5f, 0f, 10f), 1e-5f);
+        MathAssert.Equal(-3f, Interpolation.RemapUnclamped(1f, 5f, 5f, -3f, 9f), 1e-5f);
+        Assert.Throws<ArgumentException>(() => Interpolation.InverseLerp(5f, 5f, 1f));
+
+        // Параметр на ненулевом диапазоне обязан лежать в правильных пределах:
+        // на нижней границе ноль, на верхней единица, и между ними монотонно.
+        for (int step = 0; step <= 100; step++)
+        {
+            float value = 1e-7f * (step / 100f);
+            float parameter = Interpolation.InverseLerp(0f, 1e-7f, value);
+            MathAssert.Equal(step / 100f, parameter, 1e-3f);
+        }
+    }
+
+    /// <summary>
+    /// Обратимость матрицы не зависит от размера мира.
+    /// </summary>
+    /// <remarks>
+    /// У <c>Matrix3x2Extensions.TryInvert</c> был гейт
+    /// <c>|определитель| &lt;= Scalar.Epsilon</c>, которого нет у
+    /// <c>Matrix4x4Extensions.TryInvert</c>: тот просто полагается на
+    /// <c>Matrix4x4.Invert</c>. Гейт отвергал вполне обратимые матрицы с малым
+    /// однородным масштабом, то есть результат зависел от того, насколько мелкий
+    /// мир выбрал автор уровня.
+    /// </remarks>
+    [Fact]
+    public void TryInvert3x2_DoesNotDependOnScale()
+    {
+        foreach (float scale in new[] { 1e-4f, 1e-3f, 0.01f, 1f, 100f, 1e4f })
+        {
+            Matrix3x2 matrix = Matrix3x2.CreateScale(scale);
+
+            Assert.True(
+                matrix.TryInvert(out Matrix3x2 inverse),
+                $"Однородный масштаб {scale:E1} признан необратимым.");
+
+            // Обратная матрица обязана вернуть исходную.
+            Matrix3x2 identity = matrix * inverse;
+            MathAssert.Equal(1f, identity.M11, MathF.Abs(1f / scale) * 1e-3f);
+            MathAssert.Equal(0f, identity.M12, 1e-3f);
+            MathAssert.Equal(0f, identity.M21, 1e-3f);
+            MathAssert.Equal(1f, identity.M22, MathF.Abs(1f / scale) * 1e-3f);
+        }
+
+        // Вырожденная матрица не обращается ни при каком пороге.
+        Assert.False(new Matrix3x2(1f, 2f, 2f, 4f, 0f, 0f).TryInvert(out Matrix3x2 singular));
+        MathAssert.Equal(1f, singular.M11, 1e-6f);
+        MathAssert.Equal(0f, singular.M12, 1e-6f);
+        MathAssert.Equal(0f, singular.M21, 1e-6f);
+        MathAssert.Equal(1f, singular.M22, 1e-6f);
+
+        // Поведение двух аналогов обязано совпадать на вырожденной матрице.
+        Assert.False(
+            Matrix4x4Extensions.TryInvert(
+                new Matrix4x4(1f, 2f, 0f, 0f, 2f, 4f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f),
+                out _));
+    }
 }
