@@ -45,11 +45,22 @@ public static class WindowSample
         FixedStepper stepper = new(new SimulationConfig(), log);
         FrameLoop loop = new(window, new SystemFrameClock(), stepper);
 
+        long startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         FrameLoopStats stats = loop.Run(new ClearSampleTarget(window, frameLimit));
+        double elapsedSeconds = System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalSeconds;
 
         log.Write(
             LogLevel.Information,
-            $"Цикл завершён: кадров {stats.FrameCount}, шагов симуляции {stats.SimulationSteps}.");
+            $"Цикл завершён: кадров {stats.FrameCount}, шагов симуляции {stats.SimulationSteps}, " +
+            $"время цикла {elapsedSeconds:F3} с.");
+
+        if (elapsedSeconds > 0.0)
+        {
+            log.Write(
+                LogLevel.Information,
+                $"Частота кадров {stats.FrameCount / elapsedSeconds:F1} в секунду, " +
+                $"ожидаемая синхронизацией 60.");
+        }
     }
 
     /// <summary>

@@ -120,6 +120,9 @@ internal sealed class GlfwWindow : IWindow
     public void PollEvents() => _window.DoEvents();
 
     /// <inheritdoc/>
+    public void Present() => _window.DoRender();
+
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (_isDisposed)
