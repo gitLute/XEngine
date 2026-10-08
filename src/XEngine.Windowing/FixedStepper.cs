@@ -85,6 +85,17 @@ public sealed class FixedStepper
     public double StepBudgetSeconds => _config.StepBudgetSeconds;
 
     /// <summary>
+    /// Предел времени кадра в секундах.
+    /// </summary>
+    /// <remarks>
+    /// Открыт наружу, потому что ограничение времени кадра — решение цикла, а
+    /// не степера: цель цикла тоже должна получать уже ограниченное время. Два
+    /// места читают одно и то же значение из конфигурации, а не хранят свои
+    /// копии предела.
+    /// </remarks>
+    public double MaxFrameTimeSeconds => _config.MaxFrameTimeSeconds;
+
+    /// <summary>
     /// Накопленное время, ещё не превращённое в шаги.
     /// </summary>
     public double AccumulatorSeconds => _accumulatorSeconds;
