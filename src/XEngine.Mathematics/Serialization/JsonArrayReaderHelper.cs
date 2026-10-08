@@ -15,11 +15,38 @@ internal static class JsonArrayReaderHelper
     /// <param name="reader">Читатель JSON.</param>
     /// <param name="destination">Приёмник значений.</param>
     /// <returns>
-    /// Сколько чисел реально прочитано. Вызывающий обязан опираться на это
-    /// значение, а не на <c>destination.Length</c>: длина приёмника задана
-    /// вызывающим и от длины JSON-массива не зависит.
+    /// Сколько позиций приёмника заняли элементы массива. Вызывающий обязан
+    /// опираться на это значение, а не на <c>destination.Length</c>: длина приёмника
+    /// задана вызывающим и от длины JSON-массива не зависит.
     /// </returns>
     /// <exception cref="JsonException">Ожидался массив чисел.</exception>
+    /// <remarks>
+    /// Позиция определяется местом элемента в массиве, а не тем, оказался ли он
+    /// числом. Нечисловой элемент занимает своё место и даёт ноль, как и
+    /// отсутствующее имя в объектной форме: <c>[1.5, null, 3.5]</c> и
+    /// <c>{"x":1.5, "y":null, "z":3.5}</c> обязаны читаться одинаково.
+    /// <para>
+    /// Прежде индекс двигался только на токене <c>Number</c>, и нечисловой элемент
+    /// просто пропускался: <c>[1.5, null, 3.5]</c> читался как <c>(1.5, 3.5, 0)</c>,
+    /// то есть третье число занимало место второго. Одна и та же величина, записанная
+    /// двумя способами, давала два разных результата, и вызывающий выбирал способ
+    /// записи, а не полагался на разбор. Это то же рассогласование, что было между
+    /// <c>Aabb2</c> и <c>Aabb3</c>.
+    /// </para>
+    /// <para>
+    /// Следствие для цвета: <c>[r, g, b, null]</c> даёт альфу 0, потому что
+    /// четвёртая позиция занята и её значение ноль. Это следует из того же правила,
+    /// а не выбрано отдельно: в объектной форме <c>{"r":1,"g":2,"b":3,"a":null}</c>
+    /// альфа тоже читается как ноль. Прежде массив из четырёх элементов, где
+    /// четвёртый не число, давал альфу 1, то есть отличался от объектной формы.
+    /// </para>
+    /// <para>
+    /// Счётчик возвращает число занятых позиций, а не число прочитанных чисел.
+    /// Это нужно вызывающему <see cref="Rgba32JsonConverter"/>, который по нему
+    /// решает, задана ли альфа явно: массив из трёх чисел альфу не задаёт, и она
+    /// берётся равной единице.
+    /// </para>
+    /// </remarks>
     internal static int ReadFloatArray(ref Utf8JsonReader reader, scoped Span<float> destination)
     {
         if (reader.TokenType == JsonTokenType.StartObject)
@@ -35,20 +62,16 @@ internal static class JsonArrayReaderHelper
         int index = 0;
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
-            // Позиция продвигается на каждом элементе, а не только на числе:
-            // иначе [1, null, 3] прочитался бы как (1, 3, 0) — сдвиг на
-            // нечисловой элемент молча меняет значения.
-            if (reader.TokenType == JsonTokenType.Number && index < destination.Length)
+            if (index < destination.Length)
             {
-                destination[index++] = reader.GetSingle();
+                destination[index] = reader.TokenType == JsonTokenType.Number ? reader.GetSingle() : 0f;
             }
-            else
-            {
-                reader.Skip();
-            }
+
+            reader.Skip();
+            index++;
         }
 
-        return index;
+        return System.Math.Min(index, destination.Length);
     }
 
     /// <summary>

@@ -362,9 +362,18 @@ public class DefectRegressionTests
     }
 
     /// <summary>
-    /// P3: нечисловой элемент не должен сдвигать значения. Старый код двигал
-    /// индекс только на токене Number, и [1, null, 3] читался как (1, 3, 0).
+    /// P3-10: нечисловой элемент занимает свою позицию и даёт ноль.
     /// </summary>
+    /// <remarks>
+    /// Прежде индекс двигался только на токене <c>Number</c>, и
+    /// <c>[1, null, 3]</c> читался как <c>(1, 3, 0)</c>: третье число занимало
+    /// место второго. То есть нечисловой элемент не занимал позицию вовсе, и
+    /// следующие за ним числа сдвигались влево.
+    /// <para>
+    /// Дискриминирующий вход: на массиве из чисел сдвига нет, и проверка прошла бы
+    /// при прежнем коде.
+    /// </para>
+    /// </remarks>
     [Fact]
     public void JsonConverters_NonNumericElementDoesNotShiftValues()
     {
@@ -374,8 +383,8 @@ public class DefectRegressionTests
         });
 
         MathAssert.Equal(1f, result.X, 1e-6f);
-        MathAssert.Equal(3f, result.Y, 1e-6f);
-        MathAssert.Equal(0f, result.Z, 1e-6f);
+        MathAssert.Equal(0f, result.Y, 1e-6f);
+        MathAssert.Equal(3f, result.Z, 1e-6f);
     }
 
     /// <summary>
@@ -1889,6 +1898,195 @@ public class DefectRegressionTests
         }
 
         return worst;
+    }
+
+// ==================================================================
+    // P3-10. Массивная и объектная формы разбора JSON отвечали по-разному
+    // на одни и те же данные.
+
+    /// <summary>
+    /// P3-10: одна и та же величина, записанная двумя способами, обязана читаться
+    /// одинаково.
+    /// </summary>
+    /// <param name="array">Массивная форма.</param>
+    /// <param name="objectForm">Объектная форма.</param>
+    /// <remarks>
+    /// Дискриминирующий вход: на массиве из чисел обе формы и до правки совпадали,
+    /// поэтому проверка прошла бы при прежнем коде. Расхождение проявляется только
+    /// там, где есть нечисловой элемент.
+    /// </remarks>
+    [Theory]
+    [InlineData("[1.5,null,3.5]", "{\"x\":1.5,\"y\":null,\"z\":3.5}")]
+    [InlineData("[1.5,2.5,3.5]", "{\"x\":1.5,\"y\":2.5,\"z\":3.5}")]
+    [InlineData("[1.5,2.5]", "{\"x\":1.5,\"y\":2.5}")]
+    [InlineData("[null,2.5,3.5]", "{\"x\":null,\"y\":2.5,\"z\":3.5}")]
+    [InlineData("[1.5,null,null]", "{\"x\":1.5,\"y\":null,\"z\":null}")]
+    [InlineData("[null,null,3.5]", "{\"x\":null,\"y\":null,\"z\":3.5}")]
+    public void Json_ArrayAndObjectFormsAgreeOnTheSameData(string array, string objectForm)
+    {
+        Vector3 fromArray = JsonSerializer.Deserialize<Vector3>(array, CreateVectorOptions());
+        Vector3 fromObject = JsonSerializer.Deserialize<Vector3>(objectForm, CreateVectorOptions());
+
+        Assert.Equal(fromObject.X, fromArray.X);
+        Assert.Equal(fromObject.Y, fromArray.Y);
+        Assert.Equal(fromObject.Z, fromArray.Z);
+    }
+
+    /// <summary>
+    /// P3-10: позиция определяется местом элемента, а не тем, оказался ли он числом.
+    /// </summary>
+    /// <param name="json">Массивная форма.</param>
+    /// <param name="expectedX">Ожидаемое X.</param>
+    /// <param name="expectedY">Ожидаемое Y.</param>
+    /// <param name="expectedZ">Ожидаемое Z.</param>
+    /// <param name="expectedW">Ожидаемое W.</param>
+    /// <remarks>
+    /// Проверяются все три вида нечислового элемента: <c>null</c>, строка и
+    /// логическое значение, а также вложенные массив и объект. Вложенные структуры
+    /// пропускаются целиком, то есть занимают одну позицию, а не разворачиваются в
+    /// свои элементы.
+    /// </remarks>
+    [Theory]
+    [InlineData("[1,2,3,4]", 1f, 2f, 3f, 4f)]
+    [InlineData("[1,2,3]", 1f, 2f, 3f, 0f)]
+    [InlineData("[1,2]", 1f, 2f, 0f, 0f)]
+    [InlineData("[1]", 1f, 0f, 0f, 0f)]
+    [InlineData("[]", 0f, 0f, 0f, 0f)]
+    [InlineData("[1,null]", 1f, 0f, 0f, 0f)]
+    [InlineData("[null,1]", 0f, 1f, 0f, 0f)]
+    [InlineData("[1,null,3]", 1f, 0f, 3f, 0f)]
+    [InlineData("[null,null,3]", 0f, 0f, 3f, 0f)]
+    [InlineData("[null,null,null]", 0f, 0f, 0f, 0f)]
+    [InlineData("[1,\"x\",3]", 1f, 0f, 3f, 0f)]
+    [InlineData("[1,true,3]", 1f, 0f, 3f, 0f)]
+    [InlineData("[1,false,3,4]", 1f, 0f, 3f, 4f)]
+    [InlineData("[1,[2,3],4]", 1f, 0f, 4f, 0f)]
+    [InlineData("[1,{\"a\":2},4]", 1f, 0f, 4f, 0f)]
+    [InlineData("[1,2,null,null]", 1f, 2f, 0f, 0f)]
+    [InlineData("[1,2,3,4,5]", 1f, 2f, 3f, 4f)]
+    public void Json_NonNumericElementKeepsItsPosition(
+        string json,
+        float expectedX,
+        float expectedY,
+        float expectedZ,
+        float expectedW)
+    {
+        Vector4 result = JsonSerializer.Deserialize<Vector4>(json, CreateVector4Options());
+
+        Assert.Equal(new Vector4(expectedX, expectedY, expectedZ, expectedW), result);
+    }
+
+    /// <summary>
+    /// P3-10: вложенная структура занимает одну позицию, а не разворачивается.
+    /// </summary>
+    /// <remarks>
+    /// Отдельная проверка, потому что вложенный массив содержит числа, и проверка
+    /// «после `null` третье число стоит на месте» её бы не различила: сдвиг виден
+    /// только если вложенная структура заняла бы место своего содержимого.
+    /// </remarks>
+    [Fact]
+    public void Json_NestedStructureOccupiesExactlyOnePosition()
+    {
+        Vector4 result = JsonSerializer.Deserialize<Vector4>("[1,[2,3,4],5,6]", CreateVector4Options());
+
+        Assert.Equal(new Vector4(1f, 0f, 5f, 6f), result);
+    }
+
+    /// <summary>
+    /// P3-10: четвёртая позиция занята — значит альфа задана, даже если это <c>null</c>.
+    /// </summary>
+    /// <param name="json">Массивная форма цвета.</param>
+    /// <param name="expected">Ожидаемый цвет в виде строки.</param>
+    /// <remarks>
+    /// Цвет читает альфу из счётчика занятых позиций. Прежде счётчик считал числа,
+    /// а не позиции, и <c>[r, g, b, null]</c> давал альфу 1, то есть полностью
+    /// непрозрачный цвет: элемент на месте, но «не число» приравнивалось к
+    /// «не задан».
+    /// <para>
+    /// Это самое заметное проявление дефекта, и ошибка была полностью невидима:
+    /// ни прозрачность, ни отсечение, ни сортировка не выдают «слишком непрозрачный»
+    /// пиксель. Дискриминирующие строки — <c>0</c> и <c>null</c> в четвёртой
+    /// позиции: до правки обе давали альфу 1.
+    /// </para>
+    /// <para>
+    /// Объектная форма у <c>Rgba32</c> не принимается вовсе, поэтому сверять тут
+    /// не с чем: правило проверяется напрямую по результату.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("[1,0,0]", "#FF0000FF")]
+    [InlineData("[1,0,0,1]", "#FF0000FF")]
+    [InlineData("[1,0,0,0]", "#FF000000")]
+    [InlineData("[1,0,0,0.5]", "#FF000080")]
+    [InlineData("[1,0,0,null]", "#FF000000")]
+    public void Json_ColorAlphaFollowsOccupiedPositions(string json, string expected)
+    {
+        Rgba32 result = JsonSerializer.Deserialize<Rgba32>(json, CreateColorOptions());
+
+        Assert.Equal(expected, result.ToString());
+    }
+
+    /// <summary>
+    /// P3-10: массив из трёх каналов задаёт альфу 1, массив из четырёх — явную.
+    /// </summary>
+    /// <remarks>
+    /// Счётчик различает «альфа задана» и «альфа не задана» по числу занятых
+    /// позиций, а не по числу прочитанных чисел. Проверка закрепляет следствие: у
+    /// массива из трёх элементов четвёртой позиции нет вовсе, и альфа берётся из
+    /// правила, а не из нуля.
+    /// </remarks>
+    [Fact]
+    public void Json_ThreeChannelsLeaveAlphaOpaque()
+    {
+        Rgba32 result = JsonSerializer.Deserialize<Rgba32>("[1,0,0]", CreateColorOptions());
+
+        Assert.Equal("#FF0000FF", result.ToString());
+    }
+
+    /// <summary>
+    /// P3-10: страховка — отсечение лишних элементов не изменилось.
+    /// </summary>
+    [Theory]
+    [InlineData("[1,2,3,4,5]", 1f, 2f, 3f, 4f)]
+    [InlineData("[1,2,3,4,5,6,7,8]", 1f, 2f, 3f, 4f)]
+    public void Json_ExtraElementsAreStillIgnored(string json, float x, float y, float z, float w)
+    {
+        Vector4 result = JsonSerializer.Deserialize<Vector4>(json, CreateVector4Options());
+
+        Assert.Equal(new Vector4(x, y, z, w), result);
+    }
+
+    /// <summary>
+    /// P3-10: страховка — вложенный объект не оставляет читателя на неверной позиции.
+    /// </summary>
+    /// <remarks>
+    /// Пропуск вложенной структуры обязан увести читателя за её закрывающий токен.
+    /// Если этого не произойдёт, последующие элементы прочитаются как имена
+    /// свойств, и разбор объекта упадёт либо прочитает чужое.
+    /// </remarks>
+    [Theory]
+    [InlineData("[1,{\"a\":2,\"b\":3},4,5]")]
+    [InlineData("[1,{\"a\":[2,{\"c\":3}]},4,5]")]
+    [InlineData("[1,[2,[3,[4]]],5,6]")]
+    public void Json_NestedStructureDoesNotDesynchronizeTheReader(string json)
+    {
+        Vector4 result = JsonSerializer.Deserialize<Vector4>(json, CreateVector4Options());
+
+        Assert.Equal(1f, result.X);
+    }
+
+    private static JsonSerializerOptions CreateVector4Options()
+    {
+        JsonSerializerOptions options = new() { IncludeFields = true };
+        options.Converters.Add(new Vector4JsonConverter());
+        return options;
+    }
+
+    private static JsonSerializerOptions CreateColorOptions()
+    {
+        JsonSerializerOptions options = new() { IncludeFields = true };
+        options.Converters.Add(new Rgba32JsonConverter());
+        return options;
     }
 
     private const int PositiveZeroBits = 0x00000000;
