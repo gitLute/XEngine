@@ -501,4 +501,41 @@ public class GuardAndEdgeCaseTests
     }
 
     #endregion
+
+    /// <summary>
+    /// Взвешенный выбор отвергает нечисловые и бесконечные веса.
+    /// </summary>
+    /// <remarks>
+    /// Раньше проверялось только «вес меньше нуля», а для <c>NaN</c> это условие
+    /// ложно. Вес проходил, сумма становилась неопределённой, сравнение порога с
+    /// накопленной всегда было ложным, и метод возвращал последний индекс —
+    /// внешне неотличимый от правильного результата. Проверка на конкретных
+    /// числах такие случаи не видит по построению: корректный вход один и тот же.
+    /// </remarks>
+    [Fact]
+    public void NextWeightedIndex_RejectsNonFiniteWeights()
+    {
+        IRandomSource source = new XorShift64Star(0x5A6B7C8D9EAF0011UL);
+
+        Assert.Throws<ArgumentException>(() => source.NextWeightedIndex([float.NaN, 1f]));
+        Assert.Throws<ArgumentException>(() => source.NextWeightedIndex([1f, float.NaN, 3f]));
+        Assert.Throws<ArgumentException>(() => source.NextWeightedIndex([float.PositiveInfinity, 1f]));
+        Assert.Throws<ArgumentException>(() => source.NextWeightedIndex([float.NegativeInfinity, 1f]));
+        Assert.Throws<ArgumentException>(() => source.NextWeightedIndex([-1f, 1f]));
+
+        // Сумма конечных весов переполняется: дальше происходит ровно то же,
+        // что и с бесконечным весом, поэтому проверка обязана быть и после
+        // сложения.
+        Assert.Throws<ArgumentException>(() => source.NextWeightedIndex([3e38f, 3e38f, 3e38f, 3e38f]));
+
+        // Нулевые веса допустимы: они просто не выбираются.
+        for (int i = 0; i < 200; i++)
+        {
+            Assert.True(source.NextWeightedIndex([0f, 1f]) is 1, "Нулевой вес не должен выбираться.");
+            Assert.True(source.NextWeightedIndex([2f, 0f]) is 0, "Нулевой вес не должен выбираться.");
+        }
+
+        // Сумма всех нулевых весов — частный случай той же проверки.
+        Assert.Throws<ArgumentException>(() => source.NextWeightedIndex([0f, 0f]));
+    }
 }

@@ -658,23 +658,6 @@ public class RemainingBranchTests
     /// правильного результата снаружи. Пробел зафиксирован в Problems.md;
     /// здесь поведение закреплено, чтобы изменение было заметным.
     /// </remarks>
-    [Fact]
-    public void NextWeightedIndex_WithNaNWeightReturnsLastIndex()
-    {
-        var random = new XorShift64Star(1);
-
-        // Неопределённость стоит первым: сумма становится неопределённой
-        // сразу, и ни один индекс не может быть выбран сравнением с порогом.
-        for (int attempt = 0; attempt < 100; attempt++)
-        {
-            Assert.Equal(1, random.NextWeightedIndex([float.NaN, 1f]));
-        }
-
-        // Явное утверждение на текущее поведение: возвращается последний
-        // индекс, то есть произвольный, а не взвешенный. Это дефект, а не
-        // замысел.
-        Assert.Equal(2, random.NextWeightedIndex([1f, float.NaN, 3f]));
-    }
 
     #endregion
 }
