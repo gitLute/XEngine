@@ -59,8 +59,15 @@ public static class Collision
         out Vector2 penetrationAxis,
         out float penetrationDepth)
     {
-        (float cosA, float sinA) = Trig.SinCos((float)rotationA.Radians);
-        (float cosB, float sinB) = Trig.SinCos((float)rotationB.Radians);
+        // Порядок элементов кортежа — сначала синус, потом косинус, как в
+        // MathF.SinCos. Деконструкция именованная, но позиционная, поэтому
+        // имена переменных обязаны идти в том же порядке: если назвать первую
+        // переменную cos, она получит синус, и система осей окажется
+        // переставленной по координатам. Для угла 0 градусов, 45, 90 и 135
+        // переставленная система совпадает с правильной, поэтому дефект не
+        // проявлялся на тестах с такими углами.
+        (float sinA, float cosA) = Trig.SinCos((float)rotationA.Radians);
+        (float sinB, float cosB) = Trig.SinCos((float)rotationB.Radians);
 
         Vector2 axisA0 = new(cosA, sinA);
         Vector2 axisA1 = new(-sinA, cosA);
@@ -251,9 +258,24 @@ public static class Collision
     /// <param name="size">Размер прямоугольника.</param>
     /// <param name="rotation">Поворот прямоугольника.</param>
     /// <returns><c>true</c>, если точка внутри.</returns>
+    /// <remarks>
+    /// Порядок множителей задан соглашением <c>System.Numerics</c>:
+    /// произведение <c>A * B</c> применяет <b>A первым</b> (то же, что в
+    /// <see cref="Matrix4x4Extensions.CreateViewProjection"/>, где <c>view *
+    /// projection</c> применяет сначала вид). Отсюда сначала перенос, потом
+    /// поворот: <c>Translation(-center) * Rotation(-rotation)</c>.
+    /// <para>
+    /// Обратный порядок вращает точку вокруг мирового начала координат и
+    /// только потом сдвигает, то есть спрашивает попадание в прямоугольник,
+    /// центр которого повёрнут относительно настоящего центра. При центре в
+    /// начале координат обе формулы совпадают, поэтому дефект не проявлялся
+    /// на тесте с центром в нуле.
+    /// </para>
+    /// </remarks>
     public static bool Contains(Vector2 point, Vector2 center, Vector2 size, Angle rotation)
     {
-        Matrix3x2 inverse = Matrix3x2.CreateRotation((float)-rotation.Radians) * Matrix3x2.CreateTranslation(-center);
+        Matrix3x2 inverse = Matrix3x2.CreateTranslation(-center)
+            * Matrix3x2.CreateRotation((float)-rotation.Radians);
         Vector2 local = Vector2.Transform(point, inverse);
         return MathF.Abs(local.X) <= size.X * 0.5f && MathF.Abs(local.Y) <= size.Y * 0.5f;
     }
