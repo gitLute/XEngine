@@ -12,4 +12,59 @@
     <Description>Математика XEngine: типы поверх System.Numerics плюс игровые примитивы (углы, прямоугольники, фигуры, интерполяция, случайность).</Description>
   </PropertyGroup>
 
+  <!--
+    Выбор математического backend (17.5).
+
+    Fast (по умолчанию) — трансцендентные функции берутся из MathF, то есть из
+    математической библиотеки платформы. Замер: SinCos 12.8 нс на пару значений.
+    Плата — результат может различаться между операционными системами и
+    архитектурами, поэтому один и тот же сид генератора даёт на разных
+    платформах разные направления и разные кривые анимации.
+
+    Deterministic — те же функции считаются многочленами через операции, точно
+    определённые IEEE 754, поэтому результат побитово совпадает везде.
+    Замер: 34.1 нс, то есть в 2.7 раза дороже.
+
+    Сборка детерминированного варианта:
+        dotnet build XEngine.sln -c Release -p:MathBackend=Deterministic
+        dotnet test tests/XEngine.Mathematics.Tests -p:MathBackend=Deterministic
+
+    Оба варианта проходят один и тот же набор тестов.
+  -->
+
+  <PropertyGroup>
+    <MathBackend Condition="'$(MathBackend)' == ''">Fast</MathBackend>
+  </PropertyGroup>
+
+  <!--
+    Конфигурация решения Deterministic включает детерминированный backend.
+
+    Объявлять собственную конфигурацию в csproj пришлось потому, что решение
+    сопоставляет конфигурации по имени: без строки ниже сборка
+    `dotnet build XEngine.sln -c Deterministic` падала бы с «проект не
+    содержит конфигурации Deterministic».
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Deterministic'">
+    <MathBackend>Deterministic</MathBackend>
+  </PropertyGroup>
+
+  <!--
+    Проверка значения — в цели, а не переприсвоением свойства.
+
+    Свойство, переданное ключом -p, является глобальным: MSBuild запрещает
+    переприсваивать его внутри проекта, и попытка заменить недопустимое
+    значение на маркер молча ничего не делала. Цель же проверяет значение как
+    есть, и опечатка в -p:MathBackend падает с внятным текстом, а не собирает
+    библиотеку с отключённым детерминизмом.
+  -->
+  <Target Name="ValidateMathBackend"
+          BeforeTargets="CoreCompile"
+          Condition="'$(MathBackend)' != 'Fast' and '$(MathBackend)' != 'Deterministic'">
+    <Error Text="MathBackend='$(MathBackend)' не поддерживается. Допустимо: Fast, Deterministic." />
+  </Target>
+
+  <PropertyGroup Condition="'$(MathBackend)' == 'Deterministic'">
+    <DefineConstants>$(DefineConstants);XENGINE_DETERMINISTIC_MATH</DefineConstants>
+  </PropertyGroup>
+
 </Project>

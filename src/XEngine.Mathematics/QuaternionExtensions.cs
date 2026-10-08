@@ -65,19 +65,19 @@ public static class QuaternionExtensions
         Matrix4x4 matrix = Matrix4x4.CreateFromQuaternion(Normalize(rotation));
 
         float sinPitch = Scalar.Clamp(-matrix.M32, -1f, 1f);
-        float pitch = MathF.Asin(sinPitch);
+        float pitch = Trig.Asin(sinPitch);
 
         float yaw;
         float roll;
         if (MathF.Abs(sinPitch) < GimbalLockThreshold)
         {
-            yaw = MathF.Atan2(matrix.M31, matrix.M33);
-            roll = MathF.Atan2(matrix.M12, matrix.M22);
+            yaw = Trig.Atan2(matrix.M31, matrix.M33);
+            roll = Trig.Atan2(matrix.M12, matrix.M22);
         }
         else
         {
             yaw = 0f;
-            roll = sinPitch * MathF.Atan2(matrix.M13, matrix.M11);
+            roll = sinPitch * Trig.Atan2(matrix.M13, matrix.M11);
         }
 
         return (Angle.FromRadians(yaw), Angle.FromRadians(pitch), Angle.FromRadians(roll));
@@ -208,7 +208,7 @@ public static class QuaternionExtensions
 
         float vectorPartSquared =
             (relative.X * relative.X) + (relative.Y * relative.Y) + (relative.Z * relative.Z);
-        float halfAngle = MathF.Atan2(MathF.Sqrt(vectorPartSquared), MathF.Abs(relative.W));
+        float halfAngle = Trig.Atan2(MathF.Sqrt(vectorPartSquared), MathF.Abs(relative.W));
 
         return Angle.FromRadians(2.0 * halfAngle);
     }

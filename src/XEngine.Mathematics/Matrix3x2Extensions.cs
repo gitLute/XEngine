@@ -55,7 +55,7 @@ public static class Matrix3x2Extensions
     /// <param name="matrix">Матрица.</param>
     /// <returns>Угол поворота.</returns>
     public static Angle Rotation(this Matrix3x2 matrix)
-        => Angle.FromRadians(MathF.Atan2(matrix.M12, matrix.M11));
+        => Angle.FromRadians(Trig.Atan2(matrix.M12, matrix.M11));
 
     /// <summary>
     /// Возвращает масштаб матрицы по осям.

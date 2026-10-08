@@ -16,6 +16,28 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!--
+    Выбор математического backend должен доходить и до тестов.
+
+    Тесты условно компилируются: часть проверок Assert.Equal работает только в
+    детерминированном варианте, часть — только в быстром, и без этого
+    определения тесты проверяли бы не тот вариант, который собран. Свойство
+    передаётся из командной строки и в библиотеку, и сюда:
+        dotnet test tests/XEngine.Mathematics.Tests -p:MathBackend=Deterministic
+  -->
+
+  <PropertyGroup>
+    <MathBackend Condition="'$(MathBackend)' == ''">Fast</MathBackend>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Deterministic'">
+    <MathBackend>Deterministic</MathBackend>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MathBackend)' == 'Deterministic'">
+    <DefineConstants>$(DefineConstants);XENGINE_DETERMINISTIC_MATH</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />

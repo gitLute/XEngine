@@ -51,7 +51,7 @@ public static class RandomExtensions
         // Синус и косинус берутся одним вызовом, а Angle приводил бы угол к
         // float и обратно без пользы.
         float angle = random.NextFloat() * MathF.Tau;
-        (float sin, float cos) = MathF.SinCos(angle);
+        (float sin, float cos) = Trig.SinCos(angle);
         return new Vector2(cos, sin);
     }
 
@@ -67,7 +67,7 @@ public static class RandomExtensions
 
         float angle = random.NextFloat() * MathF.Tau;
         float radius = MathF.Sqrt(random.NextFloat());
-        (float sin, float cos) = MathF.SinCos(angle);
+        (float sin, float cos) = Trig.SinCos(angle);
         return new Vector2(cos * radius, sin * radius);
     }
 

@@ -88,7 +88,7 @@ public static class Interpolation
     /// <param name="deltaTime">Время кадра в секунках.</param>
     /// <returns>Сглаженное значение.</returns>
     public static float Damp(float current, float target, float lambda, float deltaTime)
-        => LerpUnclamped(current, target, 1f - MathF.Exp(-lambda * deltaTime));
+        => LerpUnclamped(current, target, 1f - Trig.Exp(-lambda * deltaTime));
 
     /// <summary>
     /// Экспоненциальное сглаживание вектора.
@@ -99,7 +99,7 @@ public static class Interpolation
     /// <param name="deltaTime">Время кадра в секундах.</param>
     /// <returns>Сглаженное значение.</returns>
     public static Vector2 Damp(Vector2 current, Vector2 target, float lambda, float deltaTime)
-        => Vector2.Lerp(current, target, 1f - MathF.Exp(-lambda * deltaTime));
+        => Vector2.Lerp(current, target, 1f - Trig.Exp(-lambda * deltaTime));
 
     /// <summary>
     /// Плавное сглаживание с ограничением максимальной скорости изменения.

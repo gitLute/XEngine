@@ -170,7 +170,7 @@ public static class Vector3Extensions
         // округляется в 1.0 и угол меньше примерно 0.01° возвращается нулём.
         float signedSine = Vector3.Dot(Vector3.Cross(fromPerpendicular, toPerpendicular), unitAxis);
         float cosine = Vector3.Dot(fromPerpendicular, toPerpendicular);
-        return Angle.FromRadians(MathF.Atan2(signedSine, cosine));
+        return Angle.FromRadians(Trig.Atan2(signedSine, cosine));
     }
 
     /// <summary>
@@ -215,10 +215,12 @@ public static class Vector3Extensions
     /// <returns>Вектор заданной длины и направления.</returns>
     public static Vector3 FromSpherical(float radius, Angle polar, Angle azimuth)
     {
-        float sinPolar = MathF.Sin((float)polar.Radians);
-        float cosPolar = MathF.Cos((float)polar.Radians);
-        float cosAzimuth = MathF.Cos((float)azimuth.Radians);
-        float sinAzimuth = MathF.Sin((float)azimuth.Radians);
+        // Синус и косинус каждого угла берутся одним вызовом: два отдельных
+        // вызова математической библиотеки вдвое дороже, а в сумме здесь было
+        // четыре вызова вместо двух.
+        (float sinPolar, float cosPolar) = Trig.SinCos((float)polar.Radians);
+        (float sinAzimuth, float cosAzimuth) = Trig.SinCos((float)azimuth.Radians);
+
         return new Vector3(
             radius * sinPolar * cosAzimuth,
             radius * cosPolar,

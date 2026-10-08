@@ -59,8 +59,8 @@ public static class Collision
         out Vector2 penetrationAxis,
         out float penetrationDepth)
     {
-        (float cosA, float sinA) = MathF.SinCos((float)rotationA.Radians);
-        (float cosB, float sinB) = MathF.SinCos((float)rotationB.Radians);
+        (float cosA, float sinA) = Trig.SinCos((float)rotationA.Radians);
+        (float cosB, float sinB) = Trig.SinCos((float)rotationB.Radians);
 
         Vector2 axisA0 = new(cosA, sinA);
         Vector2 axisA1 = new(-sinA, cosA);

@@ -148,7 +148,7 @@ public static class Matrix4x4Extensions
                 "Угол обзора должен лежать строго между 0 и 180 градусами.");
         }
 
-        float yScale = 1.0f / MathF.Tan((float)radians * 0.5f);
+        float yScale = 1.0f / Trig.Tan((float)radians * 0.5f);
         float range = farPlane - nearPlane;
 
         Matrix4x4 result = Matrix4x4.Identity;

@@ -49,14 +49,14 @@ public static class Curves
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float OutCubic(float t)
-    {
-        // Куб считается умножениями, а не Math.Pow: это два умножения против
-        // вызова математической библиотеки, а кривая зовётся на каждом кадре
-        // анимации.
-        float inverse = 1f - t;
-        return 1f - (inverse * inverse * inverse);
-    }
+    /// <remarks>
+    /// Раскрытое тождество <c>1 − (1 − t)³ = t·(3 − 3t + t²)</c>. Запись через
+    /// <c>1 − t</c> теряла точность в начале интервала: при <c>t = 1e-4</c>
+    /// ошибка была 0.14 %, потому что результат получается вычитанием из единицы
+    /// числа, очень близкого к ней. Раскрытая форма умножает на <c>t</c>, то есть
+    /// величину того же порядка, что и результат.
+    /// </remarks>
+    public static float OutCubic(float t) => t * ((t * (t - 3f)) + 3f);
 
     /// <summary>
     /// Кубическое ускорение и замедление.
@@ -74,35 +74,56 @@ public static class Curves
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float InSine(float t) => 1f - MathF.Cos(t * MathF.PI * 0.5f);
+    /// <remarks>
+    /// Формула <c>1 − cos(t·π/2)</c> здесь непригодна: при малом <c>t</c> косинус
+    /// отличается от единицы меньше чем на половину последнего разряда, и
+    /// вычитание съедает весь результат. Например при <c>t = 1e-4</c> исходная
+    /// форма возвращает ровно ноль вместо <c>1.2337e-8</c>. Поэтому используется
+    /// равносильная устойчивая форма <c>2·sin²(t·π/4)</c>, где результат
+    /// получается умножением, а не вычитанием близких чисел.
+    /// </remarks>
+    public static float InSine(float t)
+    {
+        float sine = Trig.Sin(t * (MathF.PI * 0.25f));
+        return (2f * sine) * sine;
+    }
 
     /// <summary>
     /// Синусоидальное замедление.
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float OutSine(float t) => MathF.Sin(t * MathF.PI * 0.5f);
+    public static float OutSine(float t) => Trig.Sin(t * MathF.PI * 0.5f);
 
     /// <summary>
     /// Синусоидальное ускорение и замедление.
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float InOutSine(float t) => -(MathF.Cos(MathF.PI * t) - 1f) * 0.5f;
+    /// <remarks>
+    /// Устойчивая форма <c>(1 − cos(πt))/2 = sin²(πt/2)</c>, по той же причине,
+    /// что и в <see cref="InSine"/>: исходная форма теряет все значащие цифры
+    /// около нуля (при <c>t = 1e-4</c> ошибка 20 %).
+    /// </remarks>
+    public static float InOutSine(float t)
+    {
+        float sine = Trig.Sin(t * (MathF.PI * 0.5f));
+        return sine * sine;
+    }
 
     /// <summary>
     /// Экспоненциальное ускорение.
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float InExpo(float t) => t <= 0f ? 0f : MathF.Pow(2f, (10f * t) - 10f);
+    public static float InExpo(float t) => t <= 0f ? 0f : Trig.Pow2((10f * t) - 10f);
 
     /// <summary>
     /// Экспоненциальное замедление.
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float OutExpo(float t) => t >= 1f ? 1f : 1f - MathF.Pow(2f, -10f * t);
+    public static float OutExpo(float t) => t >= 1f ? 1f : 1f - Trig.Pow2(-10f * t);
 
     /// <summary>
     /// Экспоненциальное ускорение и замедление.
@@ -122,8 +143,8 @@ public static class Curves
         }
 
         return t < 0.5f
-            ? MathF.Pow(2f, (20f * t) - 10f) * 0.5f
-            : (1f - MathF.Pow(2f, (-20f * t) + 10f)) * 0.5f + 0.5f;
+            ? Trig.Pow2((20f * t) - 10f) * 0.5f
+            : (1f - Trig.Pow2((-20f * t) + 10f)) * 0.5f + 0.5f;
     }
 
     /// <summary>
@@ -170,7 +191,7 @@ public static class Curves
             return 1f;
         }
 
-        return -MathF.Pow(2f, (10f * t) - 10f) * MathF.Sin((t * 10f - 10.75f) * (2f * MathF.PI / 3f));
+        return -Trig.Pow2((10f * t) - 10f) * Trig.Sin((t * 10f - 10.75f) * (2f * MathF.PI / 3f));
     }
 
     /// <summary>
@@ -190,7 +211,7 @@ public static class Curves
             return 1f;
         }
 
-        return MathF.Pow(2f, -10f * t) * MathF.Sin((t * 10f - 0.75f) * (2f * MathF.PI / 3f)) + 1f;
+        return Trig.Pow2(-10f * t) * Trig.Sin((t * 10f - 0.75f) * (2f * MathF.PI / 3f)) + 1f;
     }
 
     /// <summary>
