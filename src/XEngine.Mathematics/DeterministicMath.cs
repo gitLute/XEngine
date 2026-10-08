@@ -240,8 +240,49 @@ internal static class DeterministicMath
     /// <param name="y">Первая координата.</param>
     /// <param name="x">Вторая координата.</param>
     /// <returns>Угол в диапазоне <c>(-π; π]</c>.</returns>
+    /// <remarks>
+    /// Знаки нулей различаются по IEEE 754 и по C99 F.10.1.4, и различаются
+    /// не только при <c>x = ±0</c>: при <c>x &lt; 0</c> знак нуля у <c>y</c>
+    /// задаёт знак результата, то есть <c>atan2(+0, x) = +π</c> и
+    /// <c>atan2(-0, x) = -π</c>. Проверка <c>y &gt;= 0f</c> истинна и для
+    /// <c>-0</c>, из-за чего <c>-π</c> становилось <c>+π</c>: один и тот же
+    /// вход давал два разных значения <see cref="Angle"/> с разными хешами, и
+    /// варианты сборки расходились между собой.
+    /// <para>
+    /// Обе координаты бесконечны разбираются отдельно: отношение <c>y/x</c>
+    /// не определено, и без этого разбора получался <c>inf/inf = NaN</c>, то
+    /// есть угол пропадал целиком там, где платформа отвечает <c>±π/4</c> и
+    /// <c>±3π/4</c>.
+    /// </para>
+    /// <para>
+    /// Нечисловые координаты отвергаются первыми. Без этого сравнения
+    /// <c>x &gt; 0f</c> и <c>x &lt; 0f</c> для NaN ложны одновременно, управление
+    /// проваливается в ветвь «<c>x</c> — ноль со знаком», и NaN читается там как
+    /// знаковый ноль: <c>atan2(1, NaN)</c> отвечал <c>+π/2</c> вместо NaN, а
+    /// <c>atan2(NaN, NaN)</c> — <c>−π</c>. По IEEE 754 и C99 F.10.1.4 ответ при
+    /// любом нечисловом аргументе есть NaN, и заглушка должна это говорить прямо,
+    /// а не разбираться с NaN как с нулём.
+    /// </para>
+    /// </remarks>
     public static float Atan2(float y, float x)
     {
+        if (float.IsNaN(y) || float.IsNaN(x))
+        {
+            return float.NaN;
+        }
+
+        if (float.IsInfinity(y) && float.IsInfinity(x))
+        {
+            // y/x не определено. По C99 F.10.1.4: ±π/4 при x > 0 и ±3π/4 при
+            // x < 0, знак результата совпадает со знаком y. Обе величины
+            // берутся из MathF.PI, чтобы результат совпал с платформой побитово.
+            float quarter = MathF.PI * 0.25f;
+            float threeQuarters = MathF.PI * 0.75f;
+            return y > 0f
+                ? (x > 0f ? quarter : threeQuarters)
+                : (x > 0f ? -quarter : -threeQuarters);
+        }
+
         if (x > 0f)
         {
             return Atan(y / x);
@@ -252,12 +293,12 @@ internal static class DeterministicMath
             // Приведение к квадранту выполняется в двойной точности: угол
             // возвращается одинарной, а складывать его с π в одинарной нельзя —
             // при больших углах сложение теряет до нескольких последних разрядов.
-            if (y >= 0f)
-            {
-                return (float)((double)Atan(y / x) + Math.PI);
-            }
-
-            return (float)((double)Atan(y / x) - Math.PI);
+            //
+            // Знак нуля у y различается, поэтому сравнение знаков должно быть
+            // раздельным — ровно так же, как в ветви x = ±0 ниже.
+            return Negative(y)
+                ? (float)((double)Atan(y / x) - Math.PI)
+                : (float)((double)Atan(y / x) + Math.PI);
         }
 
         // x == 0: ось Y. Знак зависит от знака нуля, поэтому сравнение знаков
@@ -276,20 +317,28 @@ internal static class DeterministicMath
         // знаком обоих нулей, и все четыре различны: отсюда atan2(+0, −0) = +π,
         // atan2(−0, +0) = −0, atan2(−0, −0) = −π. Путать эти случаи нельзя:
         // результат уходит в нормализацию угла, где −0 и −π не равны.
-        int signMask = unchecked((int)0x80000000);
-        bool xNegative = (BitConverter.SingleToInt32Bits(x) & signMask) != 0;
-        bool yNegative = (BitConverter.SingleToInt32Bits(y) & signMask) != 0;
+        bool xNegative = Negative(x);
+        bool yNegative = Negative(y);
 
         if (!xNegative)
         {
             // x = +0: угол нулевой, знак берётся из y.
-            return BitConverter.Int32BitsToSingle(yNegative ? signMask : 0);
+            return BitConverter.Int32BitsToSingle(yNegative ? SignMask : 0);
         }
 
         // x = −0: угол равен ±π, знак берётся из y.
-        int result = BitConverter.SingleToInt32Bits(MathF.PI) | (yNegative ? signMask : 0);
+        int result = BitConverter.SingleToInt32Bits(MathF.PI) | (yNegative ? SignMask : 0);
         return BitConverter.Int32BitsToSingle(result);
     }
+
+    /// <summary>Старший бит float, то есть знак. −0 отличается от +0 только им.</summary>
+    private const int SignMask = unchecked((int)0x80000000);
+
+    /// <summary>
+    /// Отмечает число знаком «меньше нуля». Именно знак, а не сравнение с нулём:
+    /// сравнение <c>-0 &lt; 0</c> ложно по IEEE 754, а знак у <c>-0</c> есть.
+    /// </summary>
+    private static bool Negative(float value) => (BitConverter.SingleToInt32Bits(value) & SignMask) != 0;
 
     /// <summary>Арксинус.</summary>
     /// <param name="x">Аргумент в <c>[-1; 1]</c>.</param>

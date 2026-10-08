@@ -556,6 +556,548 @@ public class DefectRegressionTests
     }
 
     /// <summary>
+    /// P2-1: вырожденный отрезок вне прямой луча обязан быть промахом, и чем
+    /// дальше точка от начала луча, тем грубее ошибка была.
+    /// <para>
+    /// Старый код считал расстояние вычитанием <c>|offset|² − along²</c>. Обе
+    /// величины порядка квадрата расстояния до точки, поэтому разность теряла все
+    /// значащие цифры и давала ровно ноль всякий раз, когда точка лежала на
+    /// прямой с точностью до накопленной ошибки. Фактический порог рос линейно с
+    /// расстоянием, примерно как <c>along · 2⁻¹²·⁵</c>: измерено 2.4e-4 метра на
+    /// одном метре и 3.2 метра на десяти километрах.
+    /// </para>
+    /// <para>
+    /// Смещения подобраны так, чтобы вход был однозначным с обеих сторон:
+    /// боковое смещение не меньше чем в десять раз выше нового порога и не больше
+    /// чем вдвое ниже старого. Тогда промах не зависит от того, на каком разряде
+    /// остановится округление, и тест не может стать полосой неопределённости.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(1f, 5e-5f)]
+    [InlineData(10f, 5e-4f)]
+    [InlineData(60f, 2e-4f)]
+    [InlineData(100f, 1e-3f)]
+    [InlineData(1000f, 1e-3f)]
+    [InlineData(10000f, 1e-2f)]
+    public void Ray2_DegenerateSegmentOffTheLineIsMissed(float distance, float lateral)
+    {
+        Ray2 ray = new(Vector2.Zero, Vector2.UnitX);
+        Vector2 point = new(distance, lateral);
+
+        Assert.False(
+            ray.Intersects(new Segment2(point, point)),
+            $"Точка в {lateral:E1} м от прямой луча на расстоянии {distance:E1} м не должна быть попаданием.");
+    }
+
+    /// <summary>
+    /// P2-1 (обратная сторона): отмена вычитания не должна была превратить
+    /// попадания в промахи. Точка строго на прямой луча обязана остаться
+    /// попаданием на любом расстоянии, включая километры, где координаты
+    /// округлены с шагом больше микрона.
+    /// </summary>
+    [Theory]
+    [InlineData(1f)]
+    [InlineData(60f)]
+    [InlineData(1000f)]
+    [InlineData(10000f)]
+    public void Ray2_DegenerateSegmentOnTheLineStaysHitAtAnyDistance(float distance)
+    {
+        Ray2 ray = new(Vector2.Zero, Vector2.UnitX);
+        Vector2 point = new(distance, 0f);
+
+        Assert.True(
+            ray.Intersects(new Segment2(point, point)),
+            $"Точка на прямой луча на расстоянии {distance:E1} м обязана быть попаданием.");
+    }
+
+    /// <summary>
+    /// P2-1: обе ветви обязаны отвечать на один вопрос одинаково.
+    /// <para>
+    /// Ветвь вырожденного отрезка и ветвь невырожденного спрашивают одно и то
+    /// же — лежит ли отрезок на прямой лча в пределах допуска — но прежние
+    /// критерии отвечали по-разному, и вердикт зависел от того, вырожден ли
+    /// отрезок. Отрезок-точка и отрезок на той же прямой обязаны давать один
+    /// вердикт при любой длине.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(0f, true)]
+    [InlineData(1e-7f, true)]
+    [InlineData(1e-6f, true)]
+    [InlineData(1.1e-6f, false)]
+    [InlineData(1e-4f, false)]
+    [InlineData(1e-2f, false)]
+    [InlineData(1f, false)]
+    public void Ray2_DegenerateSegmentAgreesWithLongSegmentOnTheSameLine(float lateral, bool expected)
+    {
+        Ray2 ray = new(Vector2.Zero, Vector2.UnitX);
+        Vector2 point = new(5f, lateral);
+
+        Assert.True(
+            expected == ray.Intersects(new Segment2(point, point)),
+            $"Отрезок-точка на боковом смещении {lateral:E1} м ответил неверно.");
+        foreach (float length in new[] { 1e-4f, 1e-2f, 1f })
+        {
+            Assert.True(
+                expected == ray.Intersects(new Segment2(point, point + new Vector2(length, 0f))),
+                $"Отрезок длиной {length:E1} на боковом смещении {lateral:E1} м ответил иначе, чем отрезок-точка.");
+        }
+    }
+
+    /// <summary>
+    /// P2-1: точка позади начала луча не пересекается с ним даже при
+    /// километровом удалении, где отмена вычитания давала ложное попадание.
+    /// </summary>
+    [Theory]
+    [InlineData(60f, 1e-3f)]
+    [InlineData(1000f, 1f)]
+    [InlineData(10000f, 1f)]
+    public void Ray2_DegenerateSegmentBehindOriginIsMissedAtAnyDistance(float distance, float behind)
+    {
+        Ray2 ray = new(Vector2.Zero, Vector2.UnitX);
+        Vector2 point = new(-behind, 0f);
+
+        Assert.False(
+            ray.Intersects(new Segment2(point, point)),
+            $"Точка на {behind:E1} м позади начала луча, на расстоянии {distance:E1} м, не должна быть попаданием.");
+    }
+
+    /// <summary>
+    /// P2-2: подсказка из задачи, то есть полученная масштабированием вектора,
+    /// а не введённая константой.
+    /// <para>
+    /// Прежний код сравнивал промежуточный результат с точным нулём. Этот
+    /// результат получается вычитанием, поэтому в точности нулём он обращался
+    /// только когда скалярное произведение нормали с собой равнялось ровно
+    /// единице, то есть примерно у половины направлений; у остальных он был
+    /// порядка 1e-7, проверка проходила насквозь, и <c>Normalize</c> усиливала
+    /// ошибку округления в миллион раз. Подсказка, введённая константой,
+    /// всегда непараллельна вектору и всегда проходила; подсказка из настоящей
+    /// задачи параллельна по построению.
+    /// </para>
+    /// <para>
+    /// Проверяется именно <c>|dot|</c>, а не ненулевая длина: прежний код
+    /// возвращал единичный вектор, просто направленный почти вдоль исходного.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(1f, 2f, 3f, 1f)]
+    [InlineData(1f, 2f, 3f, 2f)]
+    [InlineData(1f, 2f, 3f, -1f)]
+    [InlineData(1f, 2f, 3f, 1e-3f)]
+    [InlineData(0.2672612f, -0.5345225f, 0.8017837f, 1f)]
+    [InlineData(0.2672612f, -0.5345225f, 0.8017837f, 3f)]
+    [InlineData(0.2672612f, -0.5345225f, 0.8017837f, -2f)]
+    [InlineData(-0.6f, 0.8f, 0f, 1f)]
+    [InlineData(1f, 1f, 1f, 1f)]
+    [InlineData(1f, 1f, 1f, 7f)]
+    public void Perpendicular_HintFromScaledVectorStaysOrthogonal(float x, float y, float z, float scale)
+    {
+        Vector3 vector = new(x, y, z);
+        Vector3 unit = Vector3.Normalize(vector);
+
+        Vector3 result = vector.Perpendicular(vector * scale);
+
+        Assert.True(
+            MathF.Abs(Vector3.Dot(unit, result)) < 1e-5f,
+            $"Подсказка vector*{scale} дала результат с |dot| = {MathF.Abs(Vector3.Dot(unit, result)):E3}.");
+        MathAssert.Equal(1f, result.Length());
+    }
+
+    /// <summary>
+    /// P2-2: подсказка под малым углом к вектору. Прежний код нормализовал
+    /// почти вырожденную разность и возвращал направление, почти совпадающее с
+    /// исходным: измерено <c>|dot| = 0.99</c> при угле 1e-7 рада и <c>1.0</c> при
+    /// угле нулевом, когда на выходе возвращался сам исходный вектор.
+    /// </summary>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(1e-9f)]
+    [InlineData(1e-7f)]
+    [InlineData(1e-6f)]
+    [InlineData(1e-5f)]
+    [InlineData(1e-4f)]
+    [InlineData(1e-3f)]
+    public void Perpendicular_StaysOrthogonalForNearlyParallelHint(float angle)
+    {
+        Vector3 vector = new(0.2672612f, -0.5345225f, 0.8017837f);
+        Vector3 unit = Vector3.Normalize(vector);
+        Vector3 axis = Vector3.Normalize(Vector3.Cross(unit, Vector3.UnitZ));
+        (float sin, float cos) = MathF.SinCos(angle);
+
+        Vector3 result = vector.Perpendicular((unit * cos) + (axis * sin));
+
+        Assert.True(
+            MathF.Abs(Vector3.Dot(unit, result)) < 1e-5f,
+            $"Подсказка под углом {angle:E1} рада дала |dot| = {MathF.Abs(Vector3.Dot(unit, result)):E3}.");
+        MathAssert.Equal(1f, result.Length());
+    }
+
+    /// <summary>
+    /// P2-2: базис не должен «дышать», когда подсказка слегка меняется.
+    /// <para>
+    /// Для движка это важнее точности в отдельной точке: из перпендикуляра
+    /// строится базис, и если направление скачет вместе с округлением подсказки,
+    /// базис скачет вместе с ним, то есть даёт видимое дрожание. Прежний код на
+    /// параллельной подсказке давал разброс направления до 2 радиан, то есть
+    /// результат зависел от шума округления полностью.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Perpendicular_DirectionDoesNotFollowHintRounding()
+    {
+        DeterministicRandom random = new(0x3C6EF372FE94F82BUL);
+        double worstSpread = 0.0;
+
+        for (int i = 0; i < 20000; i++)
+        {
+            Vector3 vector = random.NextUnitVector();
+            Vector3 reference = vector.Perpendicular(vector);
+
+            for (int step = 1; step <= 8; step++)
+            {
+                float jitter = 1f + (step % 2 == 0 ? 1f : -1f) * step * 1e-7f;
+                Vector3 result = vector.Perpendicular(vector * jitter);
+                worstSpread = Math.Max(worstSpread, ChordDistance(result, reference));
+            }
+        }
+
+        Assert.True(
+            worstSpread < 1e-6,
+            $"Параллельная подсказка с округлением дала разброс направления {worstSpread:E3} рад.");
+    }
+
+    /// <summary>
+    /// P2-2: обратная сторона. Метод не должен «чиниться» постоянным
+    /// возвратом базовой оси: когда подсказка образует разрешимый угол с
+    /// вектором, она обязана учитываться, иначе базис не поворачивается вместе с
+    /// движением и спрайты «прилипают» к осям.
+    /// <para>
+    /// Идеальный ответ на подсказку под углом <c>a</c> — это её проекция на
+    /// плоскость, то есть <c>dot(результат, подсказка) = sin(a)</c>.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(0.1f)]
+    [InlineData(0.5f)]
+    [InlineData(1f)]
+    [InlineData(1.5f)]
+    public void Perpendicular_FollowsResolvableHint(float angle)
+    {
+        Vector3 vector = new(0.2672612f, -0.5345225f, 0.8017837f);
+        Vector3 unit = Vector3.Normalize(vector);
+        Vector3 axis = Vector3.Normalize(Vector3.Cross(unit, Vector3.UnitZ));
+        (float sin, float cos) = MathF.SinCos(angle);
+        Vector3 hint = (unit * cos) + (axis * sin);
+
+        Vector3 result = vector.Perpendicular(hint);
+        float followed = Vector3.Dot(Vector3.Normalize(hint), result);
+
+        Assert.True(
+            followed >= MathF.Sin(angle) - 1e-4f,
+            $"Подсказка под углом {angle} рада не была учтена: dot = {followed:F6} при ожидаемом {MathF.Sin(angle):F6}.");
+    }
+
+    /// <summary>
+    /// P2-2: подсказка произвольной длины не должна ни ломать перпендикулярность,
+    /// ни ронять результат в нечисловое значение. Проверяются и заведомо малые,
+    /// и заведомо большие длины, а также <c>NaN</c> и бесконечность: результат
+    /// обязан остаться единичным конечным перпендикуляром.
+    /// </summary>
+    [Theory]
+    [InlineData(1e-7f)]
+    [InlineData(1e-20f)]
+    [InlineData(1f)]
+    [InlineData(1e20f)]
+    [InlineData(1e30f)]
+    public void Perpendicular_ExtremeHintLengthStillGivesUnitPerpendicular(float magnitude)
+    {
+        Vector3 vector = new(1f, 2f, 3f);
+        Vector3 unit = Vector3.Normalize(vector);
+
+        Vector3 result = vector.Perpendicular(vector * magnitude);
+
+        Assert.True(
+            float.IsFinite(result.X) && float.IsFinite(result.Y) && float.IsFinite(result.Z),
+            $"Подсказка длиной {magnitude:E1} дала не конечный результат {result}.");
+        MathAssert.Equal(1f, result.Length());
+        Assert.True(
+            MathF.Abs(Vector3.Dot(unit, result)) < 1e-5f,
+            $"Подсказка длиной {magnitude:E1} дала |dot| = {MathF.Abs(Vector3.Dot(unit, result)):E3}.");
+    }
+
+    /// <summary>
+    /// P2-2: нечисловая подсказка не должна выпускать <c>NaN</c> в базис.
+    /// Прежний код нормализовал результат вычитания, а вычитание с нечисловым
+    /// слагаем даёт нечисловой результат, и он выходил из метода как есть.
+    /// </summary>
+    [Theory]
+    [InlineData(float.NaN, 0f, 0f)]
+    [InlineData(0f, float.NaN, 0f)]
+    [InlineData(0f, 0f, float.NaN)]
+    [InlineData(float.PositiveInfinity, 0f, 0f)]
+    [InlineData(0f, float.NegativeInfinity, 0f)]
+    public void Perpendicular_NonFiniteHintDoesNotEscape(float x, float y, float z)
+    {
+        Vector3 vector = new(1f, 2f, 3f);
+        Vector3 unit = Vector3.Normalize(vector);
+
+        Vector3 result = vector.Perpendicular(new Vector3(x, y, z));
+
+        Assert.True(
+            float.IsFinite(result.X) && float.IsFinite(result.Y) && float.IsFinite(result.Z),
+            $"Нечисловая подсказка ({x}, {y}, {z}) дала результат {result}.");
+        MathAssert.Equal(1f, result.Length());
+        Assert.True(MathF.Abs(Vector3.Dot(unit, result)) < 1e-5f, "Результат не перпендикулярен.");
+    }
+
+    /// <summary>Биты числа <c>+0</c>.</summary>
+    private const int PositiveZeroBits = 0x00000000;
+
+    /// <summary>Биты числа <c>−0</c>.</summary>
+    /// <remarks>
+    /// Отдельная константа обязательна: <c>−0f</c> на языке C# не является
+    /// отрицательным нулём. Унарный минус на константе ноль сворачивается в
+    /// <c>+0</c>, и запись в атрибуте <c>InlineData</c> молча передала бы
+    /// положительный ноль, то есть половина проверок потеряла бы смысл, а
+    /// анализатор xUnit увидел бы дубликаты. Поэтому входы передаются битами.
+    /// </remarks>
+    private const int NegativeZeroBits = unchecked((int)0x80000000);
+
+    /// <summary>Биты числа <c>+1</c>.</summary>
+    private const int OneBits = 0x3F800000;
+
+    /// <summary>Биты числа <c>−1</c>.</summary>
+    private const int MinusOneBits = unchecked((int)0xBF800000);
+
+    /// <summary>Биты числа <c>π</c> в одинарной точности.</summary>
+    private const int PiBits = 0x40490FDB;
+
+    /// <summary>Биты числа <c>−π</c> в одинарной точности.</summary>
+    private const int MinusPiBits = unchecked((int)0xC0490FDB);
+
+    /// <summary>
+    /// P2-3: знак нуля при отрицательном <c>x</c>. По IEEE 754 и C99 F.10.1.4
+    /// <c>atan2(±0, x &lt; 0) = ±π</c>.
+    /// <para>
+    /// Прежняя проверка <c>y &gt;= 0f</c> истинна и для <c>−0</c>, из-за чего
+    /// <c>−π</c> превращалось в <c>+π</c>. Ожидания заданы литералами, а не
+    /// сравнением с <c>MathF.Atan2</c>: в сборке <c>Fast</c> детерминированный
+    /// backend не вызывается, и такое сравнение проверяло бы платформу против
+    /// самой себя, то есть проходило бы при любом состоянии кода.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(PositiveZeroBits, OneBits, PositiveZeroBits)]
+    [InlineData(NegativeZeroBits, OneBits, NegativeZeroBits)]
+    [InlineData(PositiveZeroBits, MinusOneBits, PiBits)]
+    [InlineData(NegativeZeroBits, MinusOneBits, MinusPiBits)]
+    [InlineData(PositiveZeroBits, PositiveZeroBits, PositiveZeroBits)]
+    [InlineData(NegativeZeroBits, PositiveZeroBits, NegativeZeroBits)]
+    [InlineData(PositiveZeroBits, NegativeZeroBits, PiBits)]
+    [InlineData(NegativeZeroBits, NegativeZeroBits, MinusPiBits)]
+    public void Atan2_SignedZeroMatchesStandard(int yBits, int xBits, int expectedBits)
+    {
+        float y = FromBits(yBits);
+        float x = FromBits(xBits);
+        float expected = FromBits(expectedBits);
+
+        float actual = Trig.Atan2(y, x);
+
+        Assert.True(
+            BitConverter.SingleToInt32Bits(actual) == expectedBits,
+            $"atan2({Show(y)}, {Show(x)}) вернул биты 0x{BitConverter.SingleToInt32Bits(actual):X8}, ожидалось 0x{expectedBits:X8} ({expected:R}).");
+    }
+
+    /// <summary>
+    /// P2-3: обе координаты бесконечны. Отношение <c>y/x</c> не определено,
+    /// и без отдельного разбора получался <c>inf/inf = NaN</c>: угол пропадал
+    /// целиком в варианте <c>Deterministic</c>, тогда как <c>Fast</c> отвечал
+    /// правильно, то есть варианты сборки расходились.
+    /// </summary>
+    [Theory]
+    [InlineData(float.PositiveInfinity, float.PositiveInfinity, 0.25f)]
+    [InlineData(float.NegativeInfinity, float.PositiveInfinity, -0.25f)]
+    [InlineData(float.PositiveInfinity, float.NegativeInfinity, 0.75f)]
+    [InlineData(float.NegativeInfinity, float.NegativeInfinity, -0.75f)]
+    public void Atan2_BothInfiniteMatchesStandard(float y, float x, float fractionOfPi)
+    {
+        float expected = MathF.PI * fractionOfPi;
+        float actual = Trig.Atan2(y, x);
+
+        Assert.True(
+            BitConverter.SingleToInt32Bits(actual) == BitConverter.SingleToInt32Bits(expected),
+            $"atan2({Show(y)}, {Show(x)}) вернул {actual:R}, ожидалось {expected:R}.");
+    }
+
+    /// <summary>
+    /// P2-3: нечисловые координаты обязаны давать нечисловой результат.
+    /// <para>
+    /// Это дефект, существовавший до правки знака нуля, найденный обратным
+    /// ходом. Для <c>NaN</c> обе проверки <c>x &gt; 0</c> и <c>x &lt; 0</c> ложны
+    /// одновременно, управление проваливалось в ветвь «<c>x</c> — ноль со
+    /// знаком», и <c>NaN</c> читался там как знаковый ноль: <c>atan2(1, NaN)</c>
+    /// отвечал <c>+π/2</c>, а <c>atan2(NaN, NaN)</c> — <c>−π</c>.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData(float.NaN, 1f)]
+    [InlineData(float.NaN, -1f)]
+    [InlineData(1f, float.NaN)]
+    [InlineData(-1f, float.NaN)]
+    [InlineData(float.NaN, float.NaN)]
+    [InlineData(float.NaN, 0f)]
+    public void Atan2_NonFiniteArgumentGivesNaN(float y, float x)
+    {
+        Assert.True(
+            float.IsNaN(Trig.Atan2(y, x)),
+            $"atan2({Show(y)}, {Show(x)}) вернул {Trig.Atan2(y, x)}, а по IEEE 754 ответ обязан быть NaN.");
+    }
+
+    /// <summary>
+    /// P2-3: следствие для публичного API. <c>Angle.FromDirection</c> намеренно
+    /// не нормализует результат, потому что нормализация здесь не нужна, поэтому
+    /// различие знаков нуля доходит до вызывающего: два направления вдоль одной
+    /// оси обязаны давать разные углы с разными хешами, и <c>−v</c> обязан давать
+    /// <c>−π</c>, а не <c>+π</c>.
+    /// </summary>
+    [Fact]
+    public void Angle_SignedZeroAlongTheSameAxisGivesDifferentValues()
+    {
+        Angle positive = Angle.FromDirection(new Vector2(-1f, 0f));
+        Angle negative = Angle.FromDirection(new Vector2(-1f, -0f));
+
+        Assert.NotEqual(positive, negative);
+        Assert.NotEqual(positive.GetHashCode(), negative.GetHashCode());
+        MathAssert.NearlyEqual(-Math.PI, negative.Radians, 1e-6);
+        MathAssert.NearlyEqual(Math.PI, positive.Radians, 1e-6);
+        Assert.Equal(-180f, negative.Degrees, 4);
+    }
+
+    /// <summary>
+    /// Полоса расхождения с платформой на особых значениях.
+    /// <para>
+    /// Побитовое совпадение стандарт требует не везде. Знаки нулей, нечисловые
+    /// аргументы и случай обеих бесконечностей заданы точно, и они проверяются
+    /// побитово отдельными тестами. Остальные пары обязаны попадать в
+    /// <see cref="Scalar.Epsilon"/>-полосу точности: на этом наборе измерено
+    /// ровно 1.0 последнего разряда, полоса взята с запасом.
+    /// </para>
+    /// <para>
+    /// Источник одного разряда — не путь <c>atan2</c>, а <c>atan</c> на
+    /// бесконечном аргументе: там угол восстанавливается сложением
+    /// <c>1.57079632679f</c>, и этот литерал округляется на разряд ниже
+    /// правильного <c>pi/2</c>. Дефект существовал до правки знака нуля и лежит
+    /// внутри общего бюджета точности backend, поэтому здесь он зафиксирован
+    /// полосой, а не исправлен молча.
+    /// </para>
+    /// </summary>
+    private const float Atan2SpecialValuesBudget = 2f;
+
+    /// <summary>
+    /// P2-3: сверка с платформой на особых значениях возможна только в
+    /// детерминированном варианте сборки.
+    /// <para>
+    /// В сборке <c>Fast</c> <see cref="Trig"/> зовёт <c>MathF.Atan2</c> напрямую,
+    /// поэтому сравнение платформы с <see cref="Trig"/> проверяет платформу против
+    /// самой себя и всегда проходит. Условное обозначение включается сборкой,
+    /// то есть проверка не может молча выпасть из защиты.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Atan2_SpecialValuesStayWithinBudgetOfPlatform()
+    {
+        float[] values = { 0f, -0f, 1f, -1f, float.PositiveInfinity, float.NegativeInfinity, float.Epsilon, -float.Epsilon };
+
+#if XENGINE_DETERMINISTIC_MATH
+        Assert.True(Trig.IsDeterministic, "Собран детерминированный вариант, признак обязан быть true.");
+
+        double worst = 0.0;
+        foreach (float y in values)
+        {
+            foreach (float x in values)
+            {
+                double gap = LastDigitGap(MathF.Atan2(y, x), Trig.Atan2(y, x));
+                Assert.True(
+                    gap <= Atan2SpecialValuesBudget,
+                    $"atan2({Show(y)}, {Show(x)}) расходится с платформой на {gap:F0} последнего разряда при полосе {Atan2SpecialValuesBudget}.");
+                worst = Math.Max(worst, gap);
+            }
+        }
+
+        Assert.InRange(worst, 0.0, Atan2SpecialValuesBudget);
+#else
+        // В быстром варианте сверка бессмысленна, но она обязана быть видна в
+        // выводе теста: иначе зелёный прогон читается как покрытие.
+        Assert.False(Trig.IsDeterministic, "Собран быстрый вариант, признак обязан быть false.");
+#endif
+    }
+
+    /// <summary>Восстанавливает число по его битовому образу.</summary>
+    /// <param name="bits">Битовый образ float.</param>
+    /// <returns>Число, в том числе знаковый ноль.</returns>
+    private static float FromBits(int bits) => BitConverter.Int32BitsToSingle(bits);
+
+    /// <summary>
+    /// Расхождение в единицах последнего разряда большего по модулю числа.
+    /// </summary>
+    /// <param name="first">Первое значение.</param>
+    /// <param name="second">Второе значение.</param>
+    /// <returns>Число последних разрядов расхождения.</returns>
+    private static double LastDigitGap(float first, float second)
+    {
+        if (BitConverter.SingleToInt32Bits(first) == BitConverter.SingleToInt32Bits(second))
+        {
+            return 0.0;
+        }
+
+        return Math.Abs((double)first - second) / Math.ScaleB(Math.Abs((double)first), -23);
+    }
+
+    /// <summary>
+    /// Подпись значения для сообщения об ошибке.
+    /// </summary>
+    /// <param name="value">Значение.</param>
+    /// <returns>Подпись, однозначно различающая знаковые нули.</returns>
+    /// <remarks>
+    /// Знак нуля различается битом, а сравнением с нулём не различается, поэтому
+    /// он читается прямо из битов. Остальные значения печатаются с полной
+    /// точностью: <c>F0</c> уводил бы в <c>−0</c> наименьший ненормальный
+    /// участок, и сообщение об ошибке называло бы его нулём.
+    /// </remarks>
+    private static string Show(float value)
+    {
+        if (BitConverter.SingleToInt32Bits(value) == 0)
+        {
+            return "+0";
+        }
+
+        if (BitConverter.SingleToInt32Bits(value) == NegativeZeroBits)
+        {
+            return "−0";
+        }
+
+        return value.ToString("E3");
+    }
+
+    /// <summary>
+    /// Хордовое расстояние между направлениями. Угол через <c>acos</c> здесь
+    /// не годится: у единицы производная <c>acos</c> бесконечна, и мера имеет
+    /// пол около 0.03 градуса, то есть не видит расхождений меньше него.
+    /// </summary>
+    /// <param name="first">Первое направление.</param>
+    /// <param name="second">Второе направление.</param>
+    /// <returns>Расстояние между направлениями.</returns>
+    private static double ChordDistance(Vector3 first, Vector3 second)
+    {
+        double x = first.X - second.X;
+        double y = first.Y - second.Y;
+        double z = first.Z - second.Z;
+        return Math.Sqrt((x * x) + (y * y) + (z * z));
+    }
+
+    /// <summary>
     /// P3: пустой параллелепипед не содержится ни в чём. Старая проверка
     /// удовлетворялась на переставленных границах и отвечала true.
     /// </summary>
