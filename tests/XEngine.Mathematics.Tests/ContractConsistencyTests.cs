@@ -317,4 +317,46 @@ public class ContractConsistencyTests
         Matrix4x4Extensions.CreateViewProjection(
             Matrix4x4Extensions.CreateLookAt(Vector3.Zero, new Vector3(0f, 0f, -1f), Vector3.UnitY),
             Matrix4x4Extensions.CreatePerspective(Angle.FromDegrees(60f), 1f, 0.1f, 100f)));
+
+    /// <summary>
+    /// Перенос диапазонов на вырожденном исходном диапазоне не бросает
+    /// исключение, а даёт ближний конец целевого.
+    /// </summary>
+    /// <remarks>
+    /// Раньше оба метода пробрасывали исключение из <c>InverseLerp</c>, причём
+    /// в <c>ParamName</c> стояло имя параметра <c>from</c>, которого у
+    /// <c>Remap</c> нет. Исключение приходило из вызываемого метода, поэтому в
+    /// сигнатуре оно не читалось, а вырожденные границы получаются именно там,
+    /// где вырождены данные: у уровня с одним типом врага нижняя и верхняя
+    /// границы здоровья совпадают.
+    /// </remarks>
+    [Fact]
+    public void Remap_OnEmptySourceRange_ReturnsTargetMinimum()
+    {
+        MathAssert.Equal(0f, Interpolation.Remap(1f, 5f, 5f, 0f, 10f), 1e-5f);
+        MathAssert.Equal(0f, Interpolation.RemapUnclamped(1f, 5f, 5f, 0f, 10f), 1e-5f);
+        MathAssert.Equal(-3f, Interpolation.Remap(7f, 5f, 5f, -3f, 9f), 1e-5f);
+        MathAssert.Equal(-3f, Interpolation.RemapUnclamped(7f, 5f, 5f, -3f, 9f), 1e-5f);
+
+        // Диапазон шире, чем отбрасываемый порог, но узкий: раньше тоже падал.
+        const float Narrow = 1e-7f;
+        MathAssert.Equal(0f, Interpolation.Remap(5f, 5f, 5f + Narrow, 0f, 10f), 1e-5f);
+        MathAssert.Equal(0f, Interpolation.RemapUnclamped(5f, 5f, 5f + Narrow, 0f, 10f), 1e-5f);
+
+        // Нечисловые границы по-прежнему дают нечисловой результат: NaN — это
+        // вход, а не пустой диапазон.
+        Assert.True(float.IsNaN(Interpolation.Remap(1f, float.NaN, 10f, 0f, 10f)), "NaN должен проходить насквозь.");
+
+        // Вырожденный целевой диапазон поведения не меняет: это toMin при любом t.
+        MathAssert.Equal(5f, Interpolation.Remap(1f, 0f, 10f, 5f, 5f), 1e-5f);
+
+        // Исключение InverseLerp остаётся: там деление на ноль действительно
+        // ошибка вызывающего, и её видно сразу.
+        Assert.Throws<ArgumentException>(() => Interpolation.InverseLerp(5f, 5f, 1f));
+
+        // Обычные случаи не задеты.
+        MathAssert.Equal(50f, Interpolation.Remap(5f, 0f, 10f, 0f, 100f), 1e-4f);
+        MathAssert.Equal(-50f, Interpolation.RemapUnclamped(-5f, 0f, 10f, 0f, 100f), 1e-4f);
+        MathAssert.Equal(150f, Interpolation.RemapUnclamped(15f, 0f, 10f, 0f, 100f), 1e-4f);
+    }
 }

@@ -37,14 +37,23 @@ public static class Interpolation
     /// <exception cref="ArgumentException">Начальное и конечное значения совпадают.</exception>
     public static float InverseLerp(float from, float to, float value)
     {
-        float range = to - from;
-        if (MathF.Abs(range) <= Scalar.Epsilon)
+        if (IsEmptyRange(from, to))
         {
             throw new ArgumentException("Диапазон интерполяции пуст.", nameof(from));
         }
 
-        return (value - from) / range;
+        return (value - from) / (to - from);
     }
+
+    /// <summary>
+    /// Признак вырожденного диапазона, в котором параметр интерполяции не
+    /// определён.
+    /// </summary>
+    /// <param name="from">Начало диапазона.</param>
+    /// <param name="to">Конец диапазона.</param>
+    /// <returns><c>true</c>, если ширина диапазона пренебрежимо мала.</returns>
+    private static bool IsEmptyRange(float from, float to)
+        => MathF.Abs(to - from) <= Scalar.Epsilon;
 
     /// <summary>
     /// Интерполяция с ограничением параметра в диапазоне 0..1.
@@ -212,9 +221,33 @@ public static class Interpolation
     /// <param name="fromMax">Верхняя граница исходного диапазона.</param>
     /// <param name="toMin">Нижняя граница целевого диапазона.</param>
     /// <param name="toMax">Верхняя граница целевого диапазона.</param>
-    /// <returns>Значение в целевом диапазоне.</returns>
+    /// <returns>Значение в целевом диапазоне; <paramref name="toMin"/>, если исходный диапазон пуст.</returns>
+    /// <remarks>
+    /// На пустом исходном диапазоне возвращается <paramref name="toMin"/>, а не
+    /// бросается исключение.
+    /// <para>
+    /// Перенос — это параметр интерполяции, а параметр на пустом диапазоне не
+    /// определён. Здесь он считается нулём, то есть берётся ближний конец целевого
+    /// диапазона. Это безопасное значение: продолжение кривой в вырожденном
+    /// случае всё равно произвольно, а исключение посреди игрового цикла
+    /// останавливает приложение.
+    /// </para>
+    /// <para>
+    /// Вырожденность получается именно там, где вырождены данные: у уровня с
+    /// одним типом врага нижняя и верхняя границы здоровья вычисляются из
+    /// списка длиной один и совпадают. Ничто в сигнатуре не сообщает, что границы
+    /// обязаны различаться, поэтому падать на таких данных нельзя.
+    /// </para>
+    /// <para>
+    /// <see cref="InverseLerp"/> на пустом диапазоне по-прежнему бросает
+    /// исключение: там деление на ноль действительно является ошибкой
+    /// вызывающего, и она видна сразу. Здесь метод не вызывается.
+    /// </para>
+    /// </remarks>
     public static float Remap(float value, float fromMin, float fromMax, float toMin, float toMax)
-        => LerpClamped(toMin, toMax, InverseLerp(fromMin, fromMax, value));
+        => IsEmptyRange(fromMin, fromMax)
+            ? toMin
+            : LerpClamped(toMin, toMax, InverseLerp(fromMin, fromMax, value));
 
     /// <summary>
     /// Переносит значение из одного диапазона в другой без ограничения:
@@ -226,9 +259,18 @@ public static class Interpolation
     /// <param name="fromMax">Верхняя граница исходного диапазона.</param>
     /// <param name="toMin">Нижняя граница целевого диапазона.</param>
     /// <param name="toMax">Верхняя граница целевого диапазона.</param>
-    /// <returns>Линейное продолжение переноса, возможно вне целевого диапазона.</returns>
+    /// <returns>
+    /// Линейное продолжение переноса, возможно вне целевого диапазона;
+    /// <paramref name="toMin"/>, если исходный диапазон пуст.
+    /// </returns>
+    /// <remarks>
+    /// Поведение на пустом исходном диапазоне и его обоснование описаны в
+    /// <see cref="Remap"/>.
+    /// </remarks>
     public static float RemapUnclamped(float value, float fromMin, float fromMax, float toMin, float toMax)
-        => LerpUnclamped(toMin, toMax, InverseLerp(fromMin, fromMax, value));
+        => IsEmptyRange(fromMin, fromMax)
+            ? toMin
+            : LerpUnclamped(toMin, toMax, InverseLerp(fromMin, fromMax, value));
 
     /// <summary>
     /// Ограничивает параметр интерполяции диапазоном 0..1.
