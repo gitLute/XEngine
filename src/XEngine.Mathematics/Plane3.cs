@@ -16,21 +16,30 @@ namespace XEngine.Mathematics;
 public readonly struct Plane3 : IEquatable<Plane3>
 {
     /// <summary>
-    /// Создаёт плоскость по уравнению. Нормаль должна быть ненулевой.
+    /// Создаёт плоскость по уравнению <c>a·X + b = 0</c>. Нормаль должна быть
+    /// ненулевой.
     /// </summary>
-    /// <param name="normal">Нормаль плоскости; нормализуется внутри.</param>
+    /// <param name="normal">Коэффициенты при координатах, норма не обязана быть единичной.</param>
     /// <param name="distance">Свободный член уравнения.</param>
     /// <exception cref="ArgumentException">Нормаль нулевая.</exception>
+    /// <remarks>
+    /// Свободный член делится на ту же длину, что и нормаль, иначе плоскость
+    /// сдвигается по глубине: из <c>2x + 2y + 4 = 0</c> получалось
+    /// <c>0.707x + 0.707y + 4 = 0</c>, то есть другая плоскость. Это ровно то,
+    /// что описано в <see cref="FromCoefficients"/>, и конструктор обязан вести
+    /// себя так же: он принимает те же коэффициенты уравнения.
+    /// </remarks>
     public Plane3(Vector3 normal, float distance)
     {
-        Vector3 unit = normal.SafeNormalize();
-        if (unit == Vector3.Zero)
+        float lengthSquared = normal.LengthSquared();
+        if (lengthSquared <= float.Epsilon)
         {
             throw new ArgumentException("Нормаль плоскости должна быть ненулевой.", nameof(normal));
         }
 
-        Normal = unit;
-        Distance = distance;
+        float scale = 1f / MathF.Sqrt(lengthSquared);
+        Normal = normal * scale;
+        Distance = distance * scale;
     }
 
     /// <summary>
@@ -52,12 +61,17 @@ public readonly struct Plane3 : IEquatable<Plane3>
     /// <exception cref="ArgumentException">Нормаль нулевая.</exception>
     public static Plane3 FromPointNormal(Vector3 point, Vector3 normal)
     {
-        Vector3 unit = normal.SafeNormalize();
-        if (unit == Vector3.Zero)
+        float lengthSquared = normal.LengthSquared();
+        if (lengthSquared <= float.Epsilon)
         {
             throw new ArgumentException("Нормаль плоскости должна быть ненулевой.", nameof(normal));
         }
 
+        // Нормаль и свободный член делятся на одну и ту же длину: при
+        // нормализации только нормали свободный член остался бы от другой
+        // (ненормализованной) системы координат.
+        float scale = 1f / MathF.Sqrt(lengthSquared);
+        Vector3 unit = normal * scale;
         return new Plane3(unit, -Vector3.Dot(unit, point));
     }
 
@@ -77,8 +91,11 @@ public readonly struct Plane3 : IEquatable<Plane3>
     /// </remarks>
     public static Plane3 FromCoefficients(Vector3 normal, float offset)
     {
+        // Длина считается один раз и сразу передаётся в конструктор, который
+        // принимает уже нормализованную нормаль: иначе длина вычислялась бы
+        // дважды, потому что конструктор нормализует нормаль сам.
         float length = normal.Length();
-        if (length <= Scalar.Epsilon)
+        if (length <= float.Epsilon)
         {
             throw new ArgumentException("Коэффициенты плоскости заданы ненулевым вектором.", nameof(normal));
         }

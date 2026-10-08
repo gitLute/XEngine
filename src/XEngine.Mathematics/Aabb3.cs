@@ -129,7 +129,12 @@ public readonly struct Aabb3 : IEquatable<Aabb3>
     /// <summary>
     /// Центр параллелепипеда.
     /// </summary>
-    public Vector3 Center => (Min + Max) * 0.5f;
+    /// <remarks>
+    /// У пустого параллелепипеда границы переставлены, поэтому сумма Min + Max
+    /// даёт NaN. Для него возвращается нулевой центр: NaN в центре
+    /// параллелепипеда не даёт вызывающему никакого решения.
+    /// </remarks>
+    public Vector3 Center => IsEmpty ? Vector3.Zero : (Min + Max) * 0.5f;
 
     /// <summary>
     /// Параллелепипед вырожден хотя бы по одной оси.
@@ -161,8 +166,14 @@ public readonly struct Aabb3 : IEquatable<Aabb3>
     /// </summary>
     /// <param name="other">Ограничивающий параллелепипед.</param>
     /// <returns><c>true</c>, если параллелепипед внутри.</returns>
+    /// <remarks>
+    /// Пустой параллелепипед не содержится ни в чём, включая другой пустой:
+    /// иначе его переставленные границы удовлетворяли бы сравнениям
+    /// <c>+inf &gt;= Min</c> и <c>-inf &lt;= Max</c> в любом контейнере.
+    /// </remarks>
     public bool Contains(in Aabb3 other)
-        => other.Min.X >= Min.X && other.Max.X <= Max.X
+        => !other.IsEmpty && !IsEmpty
+            && other.Min.X >= Min.X && other.Max.X <= Max.X
             && other.Min.Y >= Min.Y && other.Max.Y <= Max.Y
             && other.Min.Z >= Min.Z && other.Max.Z <= Max.Z;
 
@@ -191,14 +202,35 @@ public readonly struct Aabb3 : IEquatable<Aabb3>
     /// </summary>
     /// <param name="amount">Величина расширения по осям.</param>
     /// <returns>Расширенный параллелепипед.</returns>
-    public Aabb3 Expand(Vector3 amount) => new(Min - amount, Max + amount);
+    /// <remarks>
+    /// Отрицательный отступ, превышающий половину размера, схлопывает
+    /// параллелепипед в точку, а не бросает исключение: так же ведёт себя
+    /// <see cref="Aabb2.Expand"/>, и два типа обязаны вести себя одинаково.
+    /// </remarks>
+    public Aabb3 Expand(Vector3 amount)
+    {
+        // При отступе, превышающем половину размера, границы пересекаются, и
+        // наивный min/max перевернул бы параллелепипед вместо того, чтобы
+        // схлопнуть его: бокс стал бы только больше. Схлопывание идёт в центр,
+        // и Aabb2.Expand ведёт себя так же.
+        Vector3 center = (Min + Max) * 0.5f;
+        return new Aabb3(
+            Vector3.Min(Min - amount, center),
+            Vector3.Max(Max + amount, center));
+    }
 
     /// <summary>
     /// Возвращает ближайшую к точке точку параллелепипеда.
     /// </summary>
     /// <param name="point">Исходная точка.</param>
     /// <returns>Точка на границе или внутри.</returns>
-    public Vector3 ClosestPoint(Vector3 point) => Vector3.Clamp(point, Min, Max);
+    /// <remarks>
+    /// У пустого параллелепипеда границы переставлены, и ограничение по ним
+    /// дало бы +inf, от которого расстояние тоже бесконечно. Для него
+    /// возвращается исходная точка.
+    /// </remarks>
+    public Vector3 ClosestPoint(Vector3 point)
+        => IsEmpty ? point : Vector3.Clamp(point, Min, Max);
 
     /// <summary>
     /// Возвращает расстояние от точки до параллелепипеда.
@@ -237,8 +269,18 @@ public readonly struct Aabb3 : IEquatable<Aabb3>
     /// </summary>
     /// <param name="matrix">Матрица преобразования.</param>
     /// <returns>Объемлющий параллелепипед в мировых координатах.</returns>
+    /// <remarks>
+    /// Преобразование пустого параллелепипеда даёт пустой: его углы содержат
+    /// бесконечности, а умножение бесконечности на нулевой элемент матрицы
+    /// даёт NaN в границах результата.
+    /// </remarks>
     public Aabb3 Transform(in Matrix4x4 matrix)
     {
+        if (IsEmpty)
+        {
+            return Empty;
+        }
+
         Span<Vector3> corners = stackalloc Vector3[8];
         GetCorners(corners);
 

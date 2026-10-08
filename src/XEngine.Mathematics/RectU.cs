@@ -68,17 +68,33 @@ public readonly struct RectU : IEquatable<RectU>
     /// <summary>
     /// Номер самого правого пикселя: граница включительная.
     /// </summary>
-    public int Right => X + Width - 1;
+    /// <exception cref="OverflowException">
+    /// Правая граница не помещается в <see cref="int"/>.
+    /// </exception>
+    public int Right => checked(X + Width - 1);
 
     /// <summary>
     /// Номер самого нижнего пикселя: граница включительная.
     /// </summary>
-    public int Bottom => Y + Height - 1;
+    /// <exception cref="OverflowException">
+    /// Нижняя граница не помещается в <see cref="int"/>.
+    /// </exception>
+    public int Bottom => checked(Y + Height - 1);
 
     /// <summary>
     /// Число пикселей в прямоугольнике.
     /// </summary>
-    public int Area => Width * Height;
+    /// <exception cref="OverflowException">
+    /// Число пикселей не помещается в <see cref="int"/>.
+    /// </exception>
+    /// <remarks>
+    /// Арифметика помечена <c>checked</c> намеренно: тип сделан на
+    /// <see cref="int"/>, и переполнение молча возвращало бы отрицательную
+    /// площадь для прямоугольника больше примерно 46340 пикселей по стороне.
+    /// Исключение лучше мусора: вызывающий узнает, что прямоугольник не
+    /// помещается в счётчик, и сможет разбить его.
+    /// </remarks>
+    public int Area => checked(Width * Height);
 
     /// <summary>
     /// Прямоугольник не содержит пикселей.

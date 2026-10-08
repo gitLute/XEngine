@@ -49,7 +49,14 @@ public static class Curves
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float OutCubic(float t) => 1f - (float)Math.Pow(1f - t, 3);
+    public static float OutCubic(float t)
+    {
+        // Куб считается умножениями, а не Math.Pow: это два умножения против
+        // вызова математической библиотеки, а кривая зовётся на каждом кадре
+        // анимации.
+        float inverse = 1f - t;
+        return 1f - (inverse * inverse * inverse);
+    }
 
     /// <summary>
     /// Кубическое ускорение и замедление.
@@ -57,7 +64,10 @@ public static class Curves
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
     public static float InOutCubic(float t)
-        => t < 0.5f ? 4f * t * t * t : 1f - 4f * (float)Math.Pow(1f - t, 3);
+    {
+        float inverse = 1f - t;
+        return t < 0.5f ? 4f * t * t * t : 1f - (4f * inverse * inverse * inverse);
+    }
 
     /// <summary>
     /// Синусоидальное ускорение.
@@ -85,14 +95,14 @@ public static class Curves
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float InExpo(float t) => t <= 0f ? 0f : (float)Math.Pow(2, 10 * t - 10);
+    public static float InExpo(float t) => t <= 0f ? 0f : MathF.Pow(2f, (10f * t) - 10f);
 
     /// <summary>
     /// Экспоненциальное замедление.
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <returns>Значение кривой.</returns>
-    public static float OutExpo(float t) => t >= 1f ? 1f : 1f - (float)Math.Pow(2, -10 * t);
+    public static float OutExpo(float t) => t >= 1f ? 1f : 1f - MathF.Pow(2f, -10f * t);
 
     /// <summary>
     /// Экспоненциальное ускорение и замедление.
@@ -112,21 +122,24 @@ public static class Curves
         }
 
         return t < 0.5f
-            ? (float)Math.Pow(2, 20 * t - 10) * 0.5f
-            : (1f - (float)Math.Pow(2, -20 * t + 10)) * 0.5f + 0.5f;
+            ? MathF.Pow(2f, (20f * t) - 10f) * 0.5f
+            : (1f - MathF.Pow(2f, (-20f * t) + 10f)) * 0.5f + 0.5f;
     }
 
     /// <summary>
-    /// Ускорение с небольшим перелётом.
+    /// Ускорение с перелётом назад: кривая проваливается ниже нуля, прежде чем
+    /// начать движение.
     /// </summary>
     /// <param name="t">Параметр кривой.</param>
     /// <param name="overshoot">Коэффициент перелёта, обычно 1..3.</param>
     /// <returns>Значение кривой.</returns>
+    /// <remarks>
+    /// Формула Пеннера <c>t²((s+1)t − s)</c>: знак перед <paramref name="overshoot"/>
+    /// отрицательный, и именно он даёт провал ниже нуля. С плюсом получается
+    /// <see cref="OutBack"/>, то есть дословная копия замедления.
+    /// </remarks>
     public static float InBack(float t, float overshoot = 1.70158f)
-    {
-        float x = t - 1f;
-        return x * x * ((overshoot + 1f) * x + overshoot) + 1f;
-    }
+        => t * t * ((overshoot + 1f) * t - overshoot);
 
     /// <summary>
     /// Замедление с небольшим перелётом.
@@ -157,7 +170,7 @@ public static class Curves
             return 1f;
         }
 
-        return -(float)Math.Pow(2, 10 * t - 10) * MathF.Sin((t * 10f - 10.75f) * (2f * MathF.PI / 3f));
+        return -MathF.Pow(2f, (10f * t) - 10f) * MathF.Sin((t * 10f - 10.75f) * (2f * MathF.PI / 3f));
     }
 
     /// <summary>
@@ -177,7 +190,7 @@ public static class Curves
             return 1f;
         }
 
-        return (float)Math.Pow(2, -10 * t) * MathF.Sin((t * 10f - 0.75f) * (2f * MathF.PI / 3f)) + 1f;
+        return MathF.Pow(2f, -10f * t) * MathF.Sin((t * 10f - 0.75f) * (2f * MathF.PI / 3f)) + 1f;
     }
 
     /// <summary>

@@ -47,6 +47,12 @@ public static class Scalar
     /// <param name="step">Шаг. Должен быть больше нуля.</param>
     /// <returns>Значение, округлённое до кратного шага.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Шаг меньше или равен нулю.</exception>
+    /// <remarks>
+    /// Результат не зависит от того, округляется в float или в double: частное
+    /// <c>value / step</c> и так считается в float, и до double доходит уже
+    /// округлённое значение. Вызов <see cref="MathF.Round(float, MidpointRounding)"/>
+    /// выбран потому, что не тащит значение в double и обратно без нужды.
+    /// </remarks>
     public static float Snap(float value, float step)
     {
         if (step <= 0)
@@ -54,7 +60,7 @@ public static class Scalar
             throw new ArgumentOutOfRangeException(nameof(step), step, "Шаг должен быть больше нуля.");
         }
 
-        return (float)Math.Round(value / step, MidpointRounding.AwayFromZero) * step;
+        return MathF.Round(value / step, MidpointRounding.AwayFromZero) * step;
     }
 
     /// <summary>

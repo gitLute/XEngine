@@ -46,8 +46,13 @@ public static class RandomExtensions
     {
         ArgumentNullException.ThrowIfNull(random);
 
-        Angle angle = Angle.FromRadians(random.NextFloat() * Angle.Tau);
-        return angle.Direction;
+        // NextFloat() лежит в [0; 1), значит угол лежит в [0; 2π) — нормализация
+        // тут не нужна, а она стоила вызова Math.IEEERemainder на каждый вызов.
+        // Синус и косинус берутся одним вызовом, а Angle приводил бы угол к
+        // float и обратно без пользы.
+        float angle = random.NextFloat() * MathF.Tau;
+        (float sin, float cos) = MathF.SinCos(angle);
+        return new Vector2(cos, sin);
     }
 
     /// <summary>
@@ -62,7 +67,8 @@ public static class RandomExtensions
 
         float angle = random.NextFloat() * MathF.Tau;
         float radius = MathF.Sqrt(random.NextFloat());
-        return new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
+        (float sin, float cos) = MathF.SinCos(angle);
+        return new Vector2(cos * radius, sin * radius);
     }
 
     /// <summary>
@@ -114,7 +120,11 @@ public static class RandomExtensions
             total += weights[i];
         }
 
-        if (total <= Scalar.Epsilon)
+        // Порог — ноль, а не Scalar.Epsilon: документированный контракт обещает
+        // исключение только когда все веса нулевые. Сравнение с допуском
+        // отбрасывало бы и набор весов 1e-6, который ненулевой и в котором
+        // выбор варианта вполне определён.
+        if (total <= 0f)
         {
             throw new ArgumentException("Сумма весов должна быть больше нуля.", nameof(weights));
         }

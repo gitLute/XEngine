@@ -25,12 +25,19 @@ public static class MatrixExtensions
     /// <summary>
     /// Строит ортографическую проекцию 2D с нулевой точкой в центре вида.
     /// Границы: по X от -width/2 до +width/2, по Y от -height/2 до +height/2.
+    /// Диапазон глубины [-1; 1], как у всех проекций движка (6.5a).
     /// </summary>
     /// <param name="width">Ширина видимой области.</param>
     /// <param name="height">Высота видимой области.</param>
     /// <param name="nearPlane">Ближняя плоскость отсечения.</param>
     /// <param name="farPlane">Дальняя плоскость отсечения.</param>
     /// <returns>Матрица проекции.</returns>
+    /// <remarks>
+    /// Собственная реализация, а не <see cref="Matrix4x4.CreateOrthographic"/>:
+    /// вариант BCL даёт диапазон глубины [0; 1], а clip space OpenGL требует
+    /// [-1; 1]. Взяв BCL-вариант по незнанию, теряется половина точности
+    /// глубины и проекция перестаёт совпадать с остальными проекциями движка.
+    /// </remarks>
     public static Matrix4x4 CreateOrthographic2D(float width, float height, float nearPlane = -1f, float farPlane = 1f)
-        => Matrix4x4.CreateOrthographic(width, height, nearPlane, farPlane);
+        => Matrix4x4Extensions.CreateOrthographic(width, height, nearPlane, farPlane);
 }

@@ -15,12 +15,20 @@ namespace XEngine.Mathematics;
 public static class Vector3Extensions
 {
     /// <summary>
-    /// Возвращает нормализованный вектор. Нулевой вектор остаётся нулевым.
+    /// Возвращает нормализованный вектор. Настоящий нулевой вектор остаётся
+    /// нулевым.
     /// </summary>
     /// <param name="vector">Исходный вектор.</param>
     /// <returns>Вектор единичной длины либо нулевой.</returns>
+    /// <remarks>
+    /// Проверяется именно ноль, а не длина меньше Scalar.Epsilon. Ненулевой
+    /// вектор — направление, и он нормализуется при любой длине: иначе
+    /// отрезок длиной меньше микрона превращался в нулевой, и вызывающий получал
+    /// не направление, а его отсутствие. Обнуление коротких векторов нужно там,
+    /// где сравнивают с допуском, и там сравнивают явно.
+    /// </remarks>
     public static Vector3 SafeNormalize(this Vector3 vector)
-        => vector.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon ? Vector3.Zero : Vector3.Normalize(vector);
+        => vector == Vector3.Zero ? Vector3.Zero : Vector3.Normalize(vector);
 
     /// <summary>
     /// Ограничивает длину вектора сверху.
@@ -129,8 +137,14 @@ public static class Vector3Extensions
     /// <param name="from">Начальное направление, ненулевое.</param>
     /// <param name="to">Конечное направление, ненулевое.</param>
     /// <param name="axis">Ось вращения, ненулевая; нормализуется внутри.</param>
-    /// <returns>Угол в диапазоне [-π; π].</returns>
+    /// <returns>Угол в диапазоне (-π; π].</returns>
     /// <exception cref="ArgumentException">Направление или ось нулевые.</exception>
+    /// <remarks>
+    /// Угол считается как <c>atan2(ось · (a × b), a · b)</c> по перпендикулярным
+    /// составляющим направлений. Формула через <c>acos</c> теряла бы
+    /// относительную точность на малых углах и требовала нормализации обоих
+    /// направлений.
+    /// </remarks>
     public static Angle SignedAngleAround(Vector3 from, Vector3 to, Vector3 axis)
     {
         Vector3 unitAxis = axis.SafeNormalize();
@@ -148,12 +162,15 @@ public static class Vector3Extensions
                 fromPerpendicular == Vector3.Zero ? nameof(from) : nameof(to));
         }
 
-        float cosine = Scalar.Clamp(
-            Vector3.Dot(fromPerpendicular, toPerpendicular) / (fromPerpendicular.Length() * toPerpendicular.Length()),
-            -1f,
-            1f);
-        float sign = MathF.Sign(Vector3.Dot(Vector3.Cross(fromPerpendicular, toPerpendicular), unitAxis));
-        return Angle.FromRadians(sign * MathF.Acos(cosine));
+        // atan2 вместо acos. Числитель и знаменатель масштабируются одним и
+        // тем же положительным множителем |fromPerpendicular| * |toPerpendicular|,
+        // а atan2 инвариантен к общему положительному масштабу, поэтому
+        // нормализовать векторы не нужно. acos же требует косинуса, а у
+        // косинуса малого угла в float вся информация теряется: значение
+        // округляется в 1.0 и угол меньше примерно 0.01° возвращается нулём.
+        float signedSine = Vector3.Dot(Vector3.Cross(fromPerpendicular, toPerpendicular), unitAxis);
+        float cosine = Vector3.Dot(fromPerpendicular, toPerpendicular);
+        return Angle.FromRadians(MathF.Atan2(signedSine, cosine));
     }
 
     /// <summary>

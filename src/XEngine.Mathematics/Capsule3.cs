@@ -95,7 +95,20 @@ public readonly struct Capsule3 : IEquatable<Capsule3>
     /// </summary>
     /// <param name="point">Проверяемая точка.</param>
     /// <returns><c>true</c>, если точка внутри.</returns>
-    public bool Contains(Vector3 point) => DistanceToAxis(point) <= Radius;
+    /// <remarks>
+    /// Сравниваются квадраты расстояний, а не расстояния: корень в этой
+    /// проверке не нужен, а она стоит в горячем пути попадания луча в капсулу.
+    /// </remarks>
+    public bool Contains(Vector3 point)
+    {
+        Vector3 delta = Delta;
+        float lengthSquared = delta.LengthSquared();
+        Vector3 closest = lengthSquared <= Scalar.Epsilon * Scalar.Epsilon
+            ? PointA
+            : PointA + (delta * Scalar.Clamp(Vector3.Dot(point - PointA, delta) / lengthSquared, 0f, 1f));
+
+        return (point - closest).LengthSquared() <= Radius * Radius;
+    }
 
     /// <summary>
     /// Возвращает ближайшую к заданной точку осевой линии.
@@ -168,7 +181,13 @@ public readonly struct Capsule3 : IEquatable<Capsule3>
         out Vector3 closestA,
         out Vector3 closestB)
     {
-        const float Degenerate = 1e-8f;
+        // Два порога вместо одного: длина отрезка в квадрате измеряется в
+        // метрах², а denominator — произведение квадратов длин, то есть
+        // площадь в метрах⁴. Один порог для величин разной размерности
+        // означал бы, что параллельные отрезки произвольной длины
+        // обрабатываются вырожденными.
+        const float DegenerateLengthSquared = 1e-12f;
+        const float DegenerateDenominator = 1e-18f;
 
         Vector3 first = endA - startA;
         Vector3 second = endB - startB;
@@ -178,14 +197,14 @@ public readonly struct Capsule3 : IEquatable<Capsule3>
         float lengthSquaredSecond = Vector3.Dot(second, second);
         float alongSecond = Vector3.Dot(second, offset);
 
-        if (lengthSquaredFirst <= Degenerate && lengthSquaredSecond <= Degenerate)
+        if (lengthSquaredFirst <= DegenerateLengthSquared && lengthSquaredSecond <= DegenerateLengthSquared)
         {
             closestA = startA;
             closestB = startB;
             return;
         }
 
-        if (lengthSquaredFirst <= Degenerate)
+        if (lengthSquaredFirst <= DegenerateLengthSquared)
         {
             float parameter = Scalar.Clamp(alongSecond / lengthSquaredSecond, 0f, 1f);
             closestA = startA;
@@ -194,7 +213,7 @@ public readonly struct Capsule3 : IEquatable<Capsule3>
         }
 
         float alongFirst = Vector3.Dot(first, offset);
-        if (lengthSquaredSecond <= Degenerate)
+        if (lengthSquaredSecond <= DegenerateLengthSquared)
         {
             float parameter = Scalar.Clamp(-alongFirst / lengthSquaredFirst, 0f, 1f);
             closestA = startA + first * parameter;
@@ -204,7 +223,7 @@ public readonly struct Capsule3 : IEquatable<Capsule3>
 
         float mixed = Vector3.Dot(first, second);
         float denominator = lengthSquaredFirst * lengthSquaredSecond - mixed * mixed;
-        float parameterFirst = MathF.Abs(denominator) > Degenerate
+        float parameterFirst = MathF.Abs(denominator) > DegenerateDenominator
             ? Scalar.Clamp((mixed * alongSecond - lengthSquaredSecond * alongFirst) / denominator, 0f, 1f)
             : 0f;
 

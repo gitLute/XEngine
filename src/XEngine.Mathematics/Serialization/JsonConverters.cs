@@ -139,8 +139,15 @@ public sealed class Rgba32JsonConverter : JsonConverter<Rgba32>
         if (reader.TokenType == JsonTokenType.StartArray)
         {
             Span<float> values = stackalloc float[4];
-            JsonArrayReaderHelper.ReadFloatArray(ref reader, values);
-            return new Rgba32(values[0], values[1], values[2], values.Length == 4 ? values[3] : 1f);
+            int count = JsonArrayReaderHelper.ReadFloatArray(ref reader, values);
+
+            // Считать надо реально прочитанные элементы, а не длину буфера:
+            // stackalloc всегда ровно четыре элемента, поэтому проверка
+            // values.Length == 4 была всегда истинна, а для массива из трёх
+            // чисел непрочитанный слот давал альфу 0 вместо 1, то есть
+            // полностью невидимый цвет.
+            float alpha = count >= 4 ? values[3] : 1f;
+            return new Rgba32(values[0], values[1], values[2], alpha);
         }
 
         throw new JsonException("Ожидалась строка цвета #RRGGBBAA или массив каналов [r, g, b, a].");

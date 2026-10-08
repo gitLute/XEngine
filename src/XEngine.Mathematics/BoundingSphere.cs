@@ -34,7 +34,15 @@ public readonly struct BoundingSphere : IEquatable<BoundingSphere>
     /// </summary>
     /// <param name="bounds">Покрываемый параллелепипед.</param>
     /// <returns>Описанная сфера.</returns>
-    public static BoundingSphere FromAabb(in Aabb3 bounds) => new(bounds.Center, bounds.HalfSize.Length());
+    /// <remarks>
+    /// У пустого параллелепипеда половина размера бесконечна, а центр равен
+    /// нулю, поэтому наивный подсчёт давал бы сферу бесконечного радиуса.
+    /// Пустой параллелепипед не содержит ни одной точки, и сфера нулевого
+    /// радиуса в нуле — единственное честное описание: она не покрывает
+    /// ничего и не вводит в заблуждение.
+    /// </remarks>
+    public static BoundingSphere FromAabb(in Aabb3 bounds)
+        => bounds.IsEmpty ? new BoundingSphere(Vector3.Zero, 0f) : new BoundingSphere(bounds.Center, bounds.HalfSize.Length());
 
     /// <summary>
     /// Создаёт сферу, покрывающую набор точек.

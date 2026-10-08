@@ -29,6 +29,26 @@ public static class Collision
     /// <param name="penetrationAxis">Нормаль оси наименьшего проникновения.</param>
     /// <param name="penetrationDepth">Глубина проникновения по найденной оси.</param>
     /// <returns><c>true</c>, если прямоугольники пересекаются.</returns>
+    /// <remarks>
+    /// Оси берутся прямо из угла поворота: у прямоугольника они равны
+    /// <c>(cos, sin)</c> и <c>(−sin, cos)</c>. Строить матрицу поворота,
+    /// умножать её на перенос и звать TransformDirection было бессмысленно:
+    /// перенос на направление не влияет, а смещение центров считается отдельно.
+    /// <para>
+    /// Проверка не делит проекции на длину оси: и разделение, и проекции
+    /// радиусов умножаются на неё, поэтому знак перекрытия от деления не
+    /// меняется, а корень берётся один раз — для победившей оси.
+    /// </para>
+    /// <para>
+    /// Граница строгая: касание ребром не считается пересечением, и глубина
+    /// проникновения при этом равна нулю. Это не расхождение с
+    /// <see cref="Aabb2"/>, у которого границы включительные, а разные вопросы:
+    /// Aabb2 спрашивает, есть ли общие точки объёмов, а этот метод — есть ли
+    /// что раздвигать. У касающихся форм раздвигать нечего, и возвращать
+    /// <c>true</c> с нулевой глубиной значило бы сообщить о контакте там, где
+    /// физике нужен импульс.
+    /// </para>
+    /// </remarks>
     public static bool TryGetObbPenetration(
         Vector2 centerA,
         Vector2 sizeA,
@@ -39,43 +59,36 @@ public static class Collision
         out Vector2 penetrationAxis,
         out float penetrationDepth)
     {
-        Matrix3x2 transformA = Matrix3x2.CreateRotation((float)rotationA.Radians) * Matrix3x2.CreateTranslation(centerA);
-        Matrix3x2 transformB = Matrix3x2.CreateRotation((float)rotationB.Radians) * Matrix3x2.CreateTranslation(centerB);
+        (float cosA, float sinA) = MathF.SinCos((float)rotationA.Radians);
+        (float cosB, float sinB) = MathF.SinCos((float)rotationB.Radians);
 
-        Span<Vector2> axesA =
-        [
-            transformA.TransformDirection(Vector2.UnitX),
-            transformA.TransformDirection(Vector2.UnitY),
-        ];
-        Span<Vector2> axesB =
-        [
-            transformB.TransformDirection(Vector2.UnitX),
-            transformB.TransformDirection(Vector2.UnitY),
-        ];
+        Vector2 axisA0 = new(cosA, sinA);
+        Vector2 axisA1 = new(-sinA, cosA);
+        Vector2 axisB0 = new(cosB, sinB);
+        Vector2 axisB1 = new(-sinB, cosB);
 
         Vector2 halfA = sizeA * 0.5f;
         Vector2 halfB = sizeB * 0.5f;
         Vector2 delta = centerB - centerA;
 
-        penetrationAxis = Vector2.UnitY;
-        penetrationDepth = float.MaxValue;
+        Vector2 bestAxis = Vector2.Zero;
+        float bestOverlap = float.MaxValue;
 
-        Span<Vector2> axes = [axesA[0], axesA[1], axesB[0], axesB[1]];
-        Span<Vector2> halfExtents = [halfA, halfA, halfB, halfB];
-
-        for (int i = 0; i < axes.Length; i++)
+        for (int index = 0; index < 4; index++)
         {
-            Vector2 axis = axes[i].SafeNormalize();
-            if (axis == Vector2.Zero)
+            Vector2 axis = index switch
             {
-                continue;
-            }
+                0 => axisA0,
+                1 => axisA1,
+                2 => axisB0,
+                _ => axisB1,
+            };
 
             float separation = MathF.Abs(Vector2.Dot(delta, axis));
-            float radiusA = MathF.Abs(Vector2.Dot(axesA[0], axis)) * halfExtents[0].X
-                            + MathF.Abs(Vector2.Dot(axesA[1], axis)) * halfExtents[1].Y;
-            float radiusB = MathF.Abs(Vector2.Dot(axesB[0], axis)) * halfExtents[2].X
-                            + MathF.Abs(Vector2.Dot(axesB[1], axis)) * halfExtents[3].Y;
+            float radiusA = MathF.Abs(Vector2.Dot(axisA0, axis)) * halfA.X
+                            + MathF.Abs(Vector2.Dot(axisA1, axis)) * halfA.Y;
+            float radiusB = MathF.Abs(Vector2.Dot(axisB0, axis)) * halfB.X
+                            + MathF.Abs(Vector2.Dot(axisB1, axis)) * halfB.Y;
 
             float overlap = radiusA + radiusB - separation;
             if (overlap <= 0f)
@@ -85,13 +98,27 @@ public static class Collision
                 return false;
             }
 
-            if (overlap < penetrationDepth)
+            if (overlap < bestOverlap)
             {
-                penetrationDepth = overlap;
-                penetrationAxis = Vector2.Dot(delta, axis) < 0f ? -axis : axis;
+                bestOverlap = overlap;
+                bestAxis = axis;
             }
         }
 
+        // Оси получены из sin и cos, то есть единичные с точностью до
+        // округления. Нормировка нужна один раз, чтобы глубина проникновения
+        // была в тех же единицах, что и стороны прямоугольников.
+        float bestLength = bestAxis.Length();
+        if (bestLength <= 0f)
+        {
+            penetrationAxis = Vector2.UnitY;
+            penetrationDepth = 0f;
+            return false;
+        }
+
+        penetrationDepth = bestOverlap / bestLength;
+        Vector2 unit = bestAxis / bestLength;
+        penetrationAxis = Vector2.Dot(delta, bestAxis) < 0f ? -unit : unit;
         return true;
     }
 
@@ -121,35 +148,100 @@ public static class Collision
     /// <param name="a">Первый отрезок.</param>
     /// <param name="b">Второй отрезок.</param>
     /// <returns>Минимальное расстояние между отрезками.</returns>
+    /// <remarks>
+    /// Считается стандартным методом ближайших точек двух отрезков
+    /// (Real-Time Collision Detection, 5.1.9): оба параметра находятся
+    /// ограничением диапазона 0..1, поэтому результат не зависит от того,
+    /// пересекаются отрезки или нет, и не требует отдельной проверки на
+    /// пересечение.
+    /// <para>
+    /// Прежняя проверка пересечения сравнивала с Scalar.Epsilon векторное
+    /// произведение, то есть величину в квадратных метрах, и для отрезков
+    /// короче примерно миллиметра молча пропускалась: пересекающиеся отрезки
+    /// сообщали ненулевое расстояние. Здесь порог применяется только к квадратам
+    /// длин и в тех же единицах, в которых они измеряются.
+    /// </para>
+    /// </remarks>
     public static float SegmentSegmentDistance(Segment2 a, Segment2 b)
     {
-        Vector2 p = a.A;
-        Vector2 q = b.A;
-        Vector2 r = a.Delta;
-        Vector2 s = b.Delta;
+        // Минимизируется |r + pf·d1 − ps·d2|, поэтому условия стационарности
+        // дают pf = (b·f − c·e) / (a·e − b²) и ps = (f + pf·b) / e.
+        // Имена параметров здесь заданы явно: parameterFirst относится к
+        // первому отрезку, parameterSecond — ко второму. Раньше эти роли были
+        // перепутаны в двух ветках, и расстояние получалось завышенным.
+        Vector2 p1 = a.A;
+        Vector2 p2 = b.A;
+        Vector2 d1 = a.Delta;
+        Vector2 d2 = b.Delta;
+        Vector2 r = p1 - p2;
 
-        float rLengthSquared = r.LengthSquared();
-        float sLengthSquared = s.LengthSquared();
-        float denominator = Vector2.Cross(r, s);
+        float lengthSquared1 = Vector2.Dot(d1, d1);
+        float lengthSquared2 = Vector2.Dot(d2, d2);
+        float along2 = Vector2.Dot(d2, r);
 
-        if (MathF.Abs(denominator) > Scalar.Epsilon && rLengthSquared > Scalar.Epsilon && sLengthSquared > Scalar.Epsilon)
+        float parameterFirst;
+        float parameterSecond;
+        if (lengthSquared1 <= DegenerateLengthSquared && lengthSquared2 <= DegenerateLengthSquared)
         {
-            float t = Vector2.Cross(q - p, s) / denominator;
-            float u = Vector2.Cross(q - p, r) / denominator;
-
-            if (t is >= 0f and <= 1f && u is >= 0f and <= 1f)
+            parameterFirst = 0f;
+            parameterSecond = 0f;
+        }
+        else if (lengthSquared1 <= DegenerateLengthSquared)
+        {
+            parameterFirst = 0f;
+            parameterSecond = Scalar.Clamp(along2 / lengthSquared2, 0f, 1f);
+        }
+        else
+        {
+            float along1 = Vector2.Dot(d1, r);
+            if (lengthSquared2 <= DegenerateLengthSquared)
             {
-                return 0f;
+                parameterFirst = Scalar.Clamp(-along1 / lengthSquared1, 0f, 1f);
+                parameterSecond = 0f;
+            }
+            else
+            {
+                float mutual = Vector2.Dot(d1, d2);
+
+                // Знаменатель a·e − b² равен |d1|²|d2|²sin²θ, то есть это
+                // произведение квадратов длин на квадрат синуса угла. Сравнивать
+                // его с абсолютным допуском нельзя: результат зависел бы от
+                // масштаба мира, и отрезки короче миллиметра всегда считались бы
+                // параллельными. Порог задан относительно того же произведения,
+                // то есть по существу проверяет sin²θ > Epsilon и от масштаба не
+                // зависит.
+                float denominator = (lengthSquared1 * lengthSquared2) - (mutual * mutual);
+                parameterFirst = denominator > Scalar.Epsilon * lengthSquared1 * lengthSquared2
+                    ? Scalar.Clamp(((mutual * along2) - (lengthSquared2 * along1)) / denominator, 0f, 1f)
+                    : 0f;
+
+                parameterSecond = (along2 + (parameterFirst * mutual)) / lengthSquared2;
+                if (parameterSecond < 0f)
+                {
+                    parameterSecond = 0f;
+                    parameterFirst = Scalar.Clamp(-along1 / lengthSquared1, 0f, 1f);
+                }
+                else if (parameterSecond > 1f)
+                {
+                    parameterSecond = 1f;
+                    parameterFirst = Scalar.Clamp((mutual - along1) / lengthSquared1, 0f, 1f);
+                }
             }
         }
 
-        float distance = Vector2.Distance(p, q);
-        distance = MathF.Min(distance, Vector2.Distance(p, b.ClosestPointTo(p)));
-        distance = MathF.Min(distance, Vector2.Distance(a.ClosestPointTo(q), q));
-        distance = MathF.Min(distance, Vector2.Distance(a.ClosestPointTo(b.B), b.B));
-        distance = MathF.Min(distance, Vector2.Distance(a.ClosestPointTo(b.A), b.A));
-        return distance;
+        Vector2 closestFirst = p1 + (d1 * parameterFirst);
+        Vector2 closestSecond = p2 + (d2 * parameterSecond);
+        return Vector2.Distance(closestFirst, closestSecond);
     }
+
+    /// <summary>
+    /// Квадрат минимальной длины, ниже которого отрезок считается вырожденным
+    /// в точку. Величина измеряется в квадратных единицах, поэтому и порог
+    /// задан как квадрат длины, а не как <see cref="Scalar.Epsilon"/>. Абсолютный
+    /// порог здесь оправдан: у отрезка короче микрона во float нет различимой
+    /// внутренности, и такой отрезок действительно вырожден.
+    /// </summary>
+    private const float DegenerateLengthSquared = 1e-12f;
 
     /// <summary>
     /// Проверяет, находится ли точка внутри повёрнутого прямоугольника.

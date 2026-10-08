@@ -61,22 +61,22 @@ public readonly struct Rect : IEquatable<Rect>
     /// <summary>
     /// Координата левой стороны с учётом нормализации размера.
     /// </summary>
-    public float Left => X;
+    public float Left => MathF.Min(X, X + Width);
 
     /// <summary>
     /// Координата верхней стороны с учётом нормализации размера.
     /// </summary>
-    public float Top => Y;
+    public float Top => MathF.Min(Y, Y + Height);
 
     /// <summary>
     /// Координата правой стороны с учётом нормализации размера.
     /// </summary>
-    public float Right => X + Width;
+    public float Right => MathF.Max(X, X + Width);
 
     /// <summary>
     /// Координата нижней стороны с учётом нормализации размера.
     /// </summary>
-    public float Bottom => Y + Height;
+    public float Bottom => MathF.Max(Y, Y + Height);
 
     /// <summary>
     /// Размер прямоугольника.
@@ -147,12 +147,14 @@ public readonly struct Rect : IEquatable<Rect>
         => other.Left >= Left && other.Right <= Right && other.Top >= Top && other.Bottom <= Bottom;
 
     /// <summary>
-    /// Проверяет пересечение прямоугольников.
+    /// Проверяет пересечение прямоугольников. Границы включительные: касание
+    /// ребром считается пересечением, как в <see cref="Aabb2"/> и
+    /// <see cref="RectU"/>.
     /// </summary>
     /// <param name="other">Другой прямоугольник.</param>
     /// <returns><c>true</c>, если прямоугольники пересекаются.</returns>
     public bool Intersects(Rect other)
-        => other.Left < Right && other.Right > Left && other.Top < Bottom && other.Bottom > Top;
+        => other.Left <= Right && other.Right >= Left && other.Top <= Bottom && other.Bottom >= Top;
 
     /// <summary>
     /// Возвращает прямоугольник пересечения.
@@ -221,17 +223,53 @@ public readonly struct Rect : IEquatable<Rect>
     }
 
     /// <summary>
-    /// Поворачивает прямоугольник относительно точки.
+    /// Поворачивает прямоугольник относительно точки и возвращает ограничивающий
+    /// прямоугольник результата.
     /// </summary>
     /// <param name="angle">Угол поворота против часовой стрелки.</param>
     /// <param name="pivot">Неподвижная точка. По умолчанию центр прямоугольника.</param>
-    /// <returns>Повёрнутый прямоугольник.</returns>
+    /// <returns>Осевой прямоугольник, содержащий повёрнутый.</returns>
+    /// <remarks>
+    /// Повёрнутый прямоугольник осевым не является, поэтому результат — это
+    /// <em>объемлющий</em> осевой прямоугольник: поворачиваются все четыре
+    /// угла, затем берутся минимум и максимум по каждой оси, как это делает
+    /// <see cref="Aabb3.Transform"/>. Возвращать сами два повёрнутых угла
+    /// нельзя: тип <see cref="Rect"/> задаёт угол и размер, а второй повёрнутый
+    /// угол — это абсолютная координата, которая стала бы шириной и высотой.
+    /// Поворот на угол, не кратный 90°, всегда увеличивает результат.
+    /// </remarks>
     public Rect Rotate(Angle angle, Vector2? pivot = null)
     {
         Vector2 origin = pivot ?? Center;
-        Vector2 rotation = angle.Rotate(new Vector2(X, Y) - origin) + origin;
-        Vector2 opposite = angle.Rotate(new Vector2(Right, Bottom) - origin) + origin;
-        return new Rect(rotation, opposite);
+
+        Span<Vector2> corners =
+        [
+            new Vector2(Left, Top),
+            new Vector2(Right, Top),
+            new Vector2(Right, Bottom),
+            new Vector2(Left, Bottom),
+        ];
+
+        // Синус и косинус считаются один раз на все четыре угла, а не по паре
+        // на угол: Angle.Rotate заново вызывает математическую библиотеку, и
+        // четыре вызова вместо одного — самая дорогая часть поворота.
+        (float sin, float cos) = angle.SinCos();
+
+        Vector2 min = new(
+            (corners[0].X - origin.X) * cos - (corners[0].Y - origin.Y) * sin + origin.X,
+            (corners[0].X - origin.X) * sin + (corners[0].Y - origin.Y) * cos + origin.Y);
+        Vector2 max = min;
+
+        for (int index = 1; index < corners.Length; index++)
+        {
+            float x = corners[index].X - origin.X;
+            float y = corners[index].Y - origin.Y;
+            Vector2 rotated = new(x * cos - y * sin + origin.X, x * sin + y * cos + origin.Y);
+            min = Vector2.Min(min, rotated);
+            max = Vector2.Max(max, rotated);
+        }
+
+        return new Rect(min.X, min.Y, max.X - min.X, max.Y - min.Y);
     }
 
     /// <summary>

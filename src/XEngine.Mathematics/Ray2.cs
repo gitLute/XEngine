@@ -15,7 +15,12 @@ public readonly struct Ray2 : IEquatable<Ray2>
     public Ray2(Vector2 origin, Vector2 direction)
     {
         Origin = origin;
-        Direction = direction.SafeNormalize() == Vector2.Zero ? Vector2.UnitX : direction.SafeNormalize();
+
+        // Нормализация считается один раз. Прежняя запись звала SafeNormalize
+        // в обоих ветвлении, то есть выполняла корень дважды на каждый луч,
+        // а луч создаётся на каждый запрос пересечения.
+        Vector2 normalized = direction.SafeNormalize();
+        Direction = normalized == Vector2.Zero ? Vector2.UnitX : normalized;
     }
 
     /// <summary>
@@ -106,13 +111,38 @@ public readonly struct Ray2 : IEquatable<Ray2>
     /// </summary>
     /// <param name="segment">Отрезок.</param>
     /// <returns><c>true</c>, если луч пересекает отрезок.</returns>
+    /// <remarks>
+    /// Коллинеарные отрезки считаются пересекающимися, если лежат на луче, а не
+    /// отбрасываются как параллельные: отрезок на одной прямой с лучом и
+    /// лежащий впереди его начала пересекается с ним по всей длине.
+    /// </remarks>
     public bool Intersects(Segment2 segment)
     {
         Vector2 delta = segment.Delta;
+        if (delta.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon)
+        {
+            // Вырожденный отрезок — это точка: проверяется попадание её на луч.
+            Vector2 offset = segment.A - Origin;
+            float along = Vector2.Dot(offset, Direction);
+            return along >= -Scalar.Epsilon
+                   && offset.LengthSquared() - along * along <= Scalar.Epsilon * Scalar.Epsilon;
+        }
+
         float denominator = Vector2.Cross(Direction, delta);
         if (MathF.Abs(denominator) <= Scalar.Epsilon)
         {
-            return false;
+            // Прямые параллельны: пересечение есть только при совпадении прямых,
+            // то есть когда отрезок лежит на луче. Проверяются оба конца: луч
+            // может идти вдоль отрезка, а может быть направлен от него.
+            Vector2 offset = segment.A - Origin;
+            if (MathF.Abs(Vector2.Cross(offset, Direction)) > Scalar.Epsilon)
+            {
+                return false;
+            }
+
+            float near = Vector2.Dot(offset, Direction);
+            float far = near + Vector2.Dot(delta, Direction);
+            return near >= -Scalar.Epsilon || far >= -Scalar.Epsilon;
         }
 
         Vector2 difference = segment.A - Origin;

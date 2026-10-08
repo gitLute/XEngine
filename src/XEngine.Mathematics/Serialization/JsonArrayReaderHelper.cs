@@ -14,13 +14,17 @@ internal static class JsonArrayReaderHelper
     /// </summary>
     /// <param name="reader">Читатель JSON.</param>
     /// <param name="destination">Приёмник значений.</param>
+    /// <returns>
+    /// Сколько чисел реально прочитано. Вызывающий обязан опираться на это
+    /// значение, а не на <c>destination.Length</c>: длина приёмника задана
+    /// вызывающим и от длины JSON-массива не зависит.
+    /// </returns>
     /// <exception cref="JsonException">Ожидался массив чисел.</exception>
-    internal static void ReadFloatArray(ref Utf8JsonReader reader, scoped Span<float> destination)
+    internal static int ReadFloatArray(ref Utf8JsonReader reader, scoped Span<float> destination)
     {
         if (reader.TokenType == JsonTokenType.StartObject)
         {
-            ReadNamedFloats(ref reader, destination);
-            return;
+            return ReadNamedFloats(ref reader, destination);
         }
 
         if (reader.TokenType != JsonTokenType.StartArray)
@@ -31,6 +35,9 @@ internal static class JsonArrayReaderHelper
         int index = 0;
         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
+            // Позиция продвигается на каждом элементе, а не только на числе:
+            // иначе [1, null, 3] прочитался бы как (1, 3, 0) — сдвиг на
+            // нечисловой элемент молча меняет значения.
             if (reader.TokenType == JsonTokenType.Number && index < destination.Length)
             {
                 destination[index++] = reader.GetSingle();
@@ -40,6 +47,8 @@ internal static class JsonArrayReaderHelper
                 reader.Skip();
             }
         }
+
+        return index;
     }
 
     /// <summary>
@@ -58,10 +67,11 @@ internal static class JsonArrayReaderHelper
         writer.WriteEndArray();
     }
 
-    private static void ReadNamedFloats(ref Utf8JsonReader reader, scoped Span<float> destination)
+    private static int ReadNamedFloats(ref Utf8JsonReader reader, scoped Span<float> destination)
     {
         string[] names = ["x", "y", "z", "w"];
         Span<bool> assigned = stackalloc bool[4];
+        int count = 0;
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
@@ -78,6 +88,7 @@ internal static class JsonArrayReaderHelper
             {
                 destination[index] = reader.GetSingle();
                 assigned[index] = true;
+                count++;
             }
             else
             {
@@ -92,5 +103,7 @@ internal static class JsonArrayReaderHelper
                 destination[i] = 0f;
             }
         }
+
+        return count;
     }
 }

@@ -38,7 +38,8 @@ public static class TexelDensity
     /// <param name="textureTexels">Размер текстуры в текселях по каждой оси.</param>
     /// <returns>Число повторов по каждой оси; дробные значения сохраняются.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// Размер поверхности, плотность или размер текстуры неположительны.
+    /// Размер поверхности, плотность или размер текстуры неположительны
+    /// либо не конечны.
     /// </exception>
     public static Vector2 RepeatForSize(Vector2 sizeMeters, float texelsPerMeter, Vector2 textureTexels)
     {
@@ -64,7 +65,8 @@ public static class TexelDensity
     /// <param name="textureTexels">Размер текстуры в текселях по каждой оси.</param>
     /// <returns>Значение для uniform-параметра шейдера.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// Размер поверхности, плотность или размер текстуры неположительны.
+    /// Размер поверхности, плотность или размер текстуры неположительны
+    /// либо не конечны.
     /// </exception>
     public static Vector2 UvScaleForSize(Vector2 sizeMeters, float texelsPerMeter, Vector2 textureTexels)
         => RepeatForSize(sizeMeters, texelsPerMeter, textureTexels);
@@ -81,7 +83,8 @@ public static class TexelDensity
     /// </param>
     /// <returns>Число повторов по осям X и Y.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// Размер поверхности, плотность или размер текстуры неположительны.
+    /// Размер поверхности, плотность или размер текстуры неположительны
+    /// либо не конечны.
     /// </exception>
     public static Vector2 RepeatForSize(Vector3 sizeMeters, float texelsPerMeter, Vector2 textureTexels)
     {
@@ -111,12 +114,17 @@ public static class TexelDensity
 
     private static void Validate(float value, string parameterName)
     {
-        if (value <= 0f)
+        // Проверка построена на !(value > 0f), а не на value <= 0f: сравнение
+        // с NaN всегда ложно, поэтому старая запись пропускала NaN и на выход
+        // уходили UV-масштабы, которые нельзя ни отрисовать, ни отладить.
+        // Бесконечность формально положительна, но осмысленного UV-масштаба
+        // она тоже не даёт, поэтому отвергается вместе с NaN.
+        if (!float.IsFinite(value) || value <= 0f)
         {
             throw new ArgumentOutOfRangeException(
                 parameterName,
                 value,
-                "Размер поверхности, плотность и размер текстуры должны быть положительными.");
+                "Размер поверхности, плотность и размер текстуры должны быть конечными и положительными.");
         }
     }
 }

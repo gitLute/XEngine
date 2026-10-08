@@ -5,7 +5,7 @@ namespace XEngine.Mathematics;
 /// <summary>
 /// Угол с нормализацией и интерполяцией по кратчайшей дуге.
 /// Хранится в радианах типа <see cref="double"/>, чтобы длинная сессия не накапливала ошибку.
-/// Экземпляр всегда нормализован в диапазон <c>[-π, π]</c>, кроме результатов
+/// Экземпляр всегда нормализован в диапазон <c>(-π, π]</c>, кроме результатов
 /// операций масштабирования (см. <see cref="Scale"/>).
 /// </summary>
 public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
@@ -65,7 +65,10 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     public static Angle FromDirection(Vector2 direction)
         => MathF.Abs(direction.X) < Scalar.Epsilon && MathF.Abs(direction.Y) < Scalar.Epsilon
             ? Zero
-            : FromRadians(MathF.Atan2(direction.Y, direction.X));
+            // MathF.Atan2 уже возвращает значение в (-π; π], то есть ровно в том
+            // диапазоне, в котором угол нормализован, поэтому нормализация
+            // повторно не нужна.
+            : FromRadiansRaw(MathF.Atan2(direction.Y, direction.X));
 
     /// <summary>
     /// Нулевой угол.
@@ -90,22 +93,58 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <summary>
     /// Синус угла.
     /// </summary>
-    public float Sin => (float)Math.Sin(_radians);
+    /// <remarks>
+    /// Считается в одинарной точности, как и сам возвращаемый тип: вычисление в
+    /// double с последующим приведением к float не даёт выигрыша в точности
+    /// (округление double до float не искажает результат), но стоит заметно
+    /// дороже. Угол приводится к float один раз, поэтому <see cref="SinCos"/> и
+    /// по отдельности <see cref="Sin"/> с <see cref="Cos"/> дают одно значение.
+    /// <para>
+    /// Результат зависит от операционной системы и архитектуры: MathF — это
+    /// вызов математической библиотеки платформы. Для воспроизводимости
+    /// физики по сети и записи в детерминированные снимки кадра это учитывать
+    /// отдельно.
+    /// </para>
+    /// </remarks>
+    public float Sin => MathF.Sin((float)_radians);
 
     /// <summary>
-    /// Косинус угла.
+    /// Косинус угла. Считается в одинарной точности, см. <see cref="Sin"/>.
     /// </summary>
-    public float Cos => (float)Math.Cos(_radians);
+    public float Cos => MathF.Cos((float)_radians);
 
     /// <summary>
     /// Тангенс угла.
     /// </summary>
-    public float Tan => (float)Math.Tan(_radians);
+    public float Tan => MathF.Tan((float)_radians);
 
     /// <summary>
     /// Единичный вектор направления угла.
     /// </summary>
-    public Vector2 Direction => new(Cos, Sin);
+    /// <remarks>
+    /// Синус и косинус берутся одним вызовом <see cref="MathF.SinCos"/>:
+    /// два отдельных вызова математической библиотеки вдвое дороже, а
+    /// <see cref="Rotate"/> на каждом угле делает именно два.
+    /// </remarks>
+    public Vector2 Direction
+    {
+        get
+        {
+            (float sin, float cos) = SinCos();
+            return new Vector2(cos, sin);
+        }
+    }
+
+    /// <summary>
+    /// Возвращает синус и косинус угла одним вызовом математической библиотеки.
+    /// </summary>
+    /// <returns>Синус и косинус угла.</returns>
+    internal (float Sin, float Cos) SinCos()
+    {
+        float radians = (float)_radians;
+        (float sin, float cos) = MathF.SinCos(radians);
+        return (sin, cos);
+    }
 
     /// <summary>
     /// Приводит угол к диапазону <c>[-π, π]</c>.
@@ -147,18 +186,27 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <returns>Повёрнутый вектор.</returns>
     public Vector2 Rotate(Vector2 vector)
     {
-        float sin = Sin;
-        float cos = Cos;
+        (float sin, float cos) = SinCos();
         return new Vector2(
             vector.X * cos - vector.Y * sin,
             vector.X * sin + vector.Y * cos);
     }
 
     /// <summary>
-    /// Поворачивает направляющий вектор на этот угол, игнорируя его длину.
+    /// Поворачивает направление вектора на этот угол против часовой стрелки,
+    /// отбрасывая его длину: результат всегда единичный.
     /// </summary>
     /// <param name="vector">Исходный вектор.</param>
-    /// <returns>Вектор той же длины, повернутый на угол.</returns>
+    /// <returns>Единичный вектор, повёрнутый на угол.</returns>
+    /// <remarks>
+    /// Не путать с <see cref="Rotate"/>, который сохраняет длину, и с
+    /// <c>VectorExtensions.RotateDirection</c>, который вообще не поворачивает
+    /// направление, а задаёт его: <c>Angle.FromDegrees(90).RotateDirection((0, 1))</c>
+    /// даёт <c>(-1, 0)</c> (поворот на 90°), тогда как
+    /// <c>VectorExtensions.RotateDirection((0, 1), 90°)</c> даёт <c>(0, 1)</c>
+    /// (направление задано углом). Совпадения результатов на отдельных входах
+    /// случайны, общего у этих двух методов ничего нет.
+    /// </remarks>
     public Vector2 RotateDirection(Vector2 vector) => Rotate(vector.SafeNormalize());
 
     /// <summary>
@@ -200,10 +248,18 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     }
 
     /// <summary>
-    /// Нормализует значение в радианах в диапазон <c>[-π, π]</c>.
+    /// Нормализует значение в радианах в диапазон <c>(-π, π]</c>: минус пи
+    /// приводится к плюс пи.
     /// </summary>
     /// <param name="radians">Исходное значение в радианах.</param>
     /// <returns>Нормализованное значение.</returns>
+    /// <remarks>
+    /// Границы именно такие, а не <c>[-π, π]</c>: <c>Math.IEEERemainder</c>
+    /// возвращает <c>[-π, π]</c>, и следующая строка сдвигает левую границу
+    /// внутрь. Из этого следует, что <c>FromRadians(0) != FromRadians(Tau)</c>
+    /// (угол всегда нормализован), и что равенство и <see cref="GetHashCode"/>
+    /// считаются по нормализованным радианам, а не по исходным.
+    /// </remarks>
     public static double NormalizeRadians(double radians)
     {
         double wrapped = Math.IEEERemainder(radians, Tau);

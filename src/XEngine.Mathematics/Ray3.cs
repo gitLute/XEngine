@@ -151,6 +151,14 @@ public readonly struct Ray3 : IEquatable<Ray3>
 
     private bool IntersectsBox(in Aabb3 bounds, out float distance)
     {
+        distance = 0f;
+        if (bounds.IsEmpty)
+        {
+            // У пустого параллелепипеда Min = +inf и Max = -inf: слэб-метод
+            // переставляет границы и получает пересечение, которого нет.
+            return false;
+        }
+
         float min = 0f;
         float max = float.MaxValue;
         Vector3 origin = Origin;
@@ -223,28 +231,53 @@ public readonly struct Ray3 : IEquatable<Ray3>
         distance = 0f;
         Vector3 toCenter = sphere.Center - Origin;
 
-        float projection = Vector3.Dot(toCenter, Direction);
-        if (projection < 0f)
-        {
-            // Всё, что ближе начала луча, не пересекается: сфера за спиной.
-            return false;
-        }
-
         float radius = sphere.Radius;
-        float perpendicularSquared = toCenter.LengthSquared() - projection * projection;
-        if (perpendicularSquared > radius * radius)
+        float radiusSquared = radius * radius;
+        float lengthSquared = toCenter.LengthSquared();
+
+        // Начало луча внутри сферы проверяется напрямую и до всего остального.
+        // Раньше здесь стоял ранний выход по projection < 0 («сфера за спиной»),
+        // который отбрасывал и старт изнутри; строка Max(0f, ...) ниже была при
+        // этом недостижима. Проверять entry < 0 вместо этого нельзя: при
+        // отрицательной проекции сфера за спиной и старт изнутри дают один и
+        // тот же знак entry.
+        if (lengthSquared <= radiusSquared)
+        {
+            return true;
+        }
+
+        float projection = Vector3.Dot(toCenter, Direction);
+        float perpendicularSquared = lengthSquared - projection * projection;
+        if (perpendicularSquared > radiusSquared)
+        {
+            // Сфера целиком сбоку от луча: касаться её нечем.
+            return false;
+        }
+
+        // Половина хорды пересечения сферы вдоль луча.
+        float halfChord = MathF.Sqrt(MathF.Max(0f, radiusSquared - perpendicularSquared));
+        float entry = projection - halfChord;
+        if (entry < 0f)
         {
             return false;
         }
 
-        float along = MathF.Sqrt(MathF.Max(0f, radius * radius - perpendicularSquared));
-        distance = MathF.Max(0f, projection - along);
+        distance = entry;
         return true;
     }
 
     private bool IntersectsCapsule(in Capsule3 capsule, out float distance)
     {
         distance = 0f;
+
+        // Начало луча внутри капсулы: вход происходит в ноль. Без этой проверки
+        // цилиндр вернул бы точку выхода из тела (луч, начатый внутри, входит в
+        // уравнение корнем уже за началом), и расстояние до входа оказалось бы
+        // больше нуля вопреки документации метода Raycast.
+        if (capsule.Contains(Origin))
+        {
+            return true;
+        }
 
         bool hitSphereA = IntersectsSphere(new BoundingSphere(capsule.PointA, capsule.Radius), out float enterA);
         bool hitSphereB = IntersectsSphere(new BoundingSphere(capsule.PointB, capsule.Radius), out float enterB);
@@ -290,36 +323,48 @@ public readonly struct Ray3 : IEquatable<Ray3>
 
         Vector3 axis = capsule.Delta;
         float axisLengthSquared = axis.LengthSquared();
-        if (axisLengthSquared <= Scalar.Epsilon * Scalar.Epsilon)
-        {
-            return false;
-        }
 
-        Vector3 toPointA = capsule.PointA - Origin;
-        float directionOnAxis = Vector3.Dot(Direction, axis);
-        float pointOnAxis = Vector3.Dot(toPointA, axis);
-        float perpendicularSquared = Direction.LengthSquared() - directionOnAxis * directionOnAxis / axisLengthSquared;
-
-        Vector3 offset = toPointA - Direction * pointOnAxis / directionOnAxis;
-        float centerOffsetSquared = offset.LengthSquared() - pointOnAxis * pointOnAxis / axisLengthSquared;
+        Vector3 toPointA = Origin - capsule.PointA;
         float radius = capsule.Radius;
 
-        if (perpendicularSquared <= Scalar.Epsilon)
+        // Вырожденная капсула — это сфера: осевая линия сжалась в точку, и
+        // пересечение с ней обязано проверяться как пересечение со сферой.
+        // Прежняя проверка возвращала false молча, и луч, идущий сквозь
+        // капсулу-коллайдер, проходил насквозь.
+        if (axisLengthSquared <= Scalar.Epsilon * Scalar.Epsilon)
         {
+            return IntersectsSphere(new BoundingSphere(capsule.PointA, radius), out distance);
+        }
+
+        float directionOnAxis = Vector3.Dot(Direction, axis);
+        float pointOnAxis = Vector3.Dot(toPointA, axis);
+        Vector3 perpendicularDirection = Direction - axis * (directionOnAxis / axisLengthSquared);
+        Vector3 perpendicularOffset = toPointA - axis * (pointOnAxis / axisLengthSquared);
+
+        // |offset + t * directionPerp|^2 = radius^2
+        // Порог — квадрат длины: perpendicularDirection по модулю не больше
+        // единицы, и сравнивать его квадрат с длиной, то есть с Scalar.Epsilon,
+        // означало бы отбрасывать лучи, отклонённые от оси меньше чем на миллиметр.
+        float quadratic = perpendicularDirection.LengthSquared();
+        if (quadratic <= Scalar.Epsilon * Scalar.Epsilon)
+        {
+            // Луч параллелен оси: боковую поверхность он пересечь не может,
+            // а торцы закрыты эндкапсулами.
             return false;
         }
 
-        float linear = 2f * Vector3.Dot(offset, Direction);
-        float constant = centerOffsetSquared - radius * radius;
-        float discriminant = linear * linear - 4f * perpendicularSquared * constant;
+        float linear = Vector3.Dot(perpendicularOffset, perpendicularDirection);
+        float constant = perpendicularOffset.LengthSquared() - (radius * radius);
+
+        float discriminant = (linear * linear) - (quadratic * constant);
         if (discriminant < 0f)
         {
             return false;
         }
 
         float root = MathF.Sqrt(discriminant);
-        float near = (-linear - root) / (2f * perpendicularSquared);
-        float far = (-linear + root) / (2f * perpendicularSquared);
+        float near = (-linear - root) / quadratic;
+        float far = (-linear + root) / quadratic;
 
         foreach (float candidate in stackalloc[] { near, far })
         {

@@ -263,19 +263,23 @@ public static class Matrix4x4Extensions
         float safeY = scale.Y <= Scalar.Epsilon ? 1f : scale.Y;
         float safeZ = scale.Z <= Scalar.Epsilon ? 1f : scale.Z;
 
-        // Базис занимает столбцы матрицы, поэтому масштаб оси делит столбец,
-        // а не строку.
+        // GetScale считает масштаб как длины СТРОК (в соглашении вектор-строка
+        // строка матрицы — образ базового вектора), поэтому масштаб оси i
+        // делит строку i целиком: Mij / scale[i]. Деление по столбцам
+        // Mij / scale[j] считает масштаб, повёрнутый вместе с поворотом, и на
+        // неравномерном масштабе даёт неединичный кватернион, который затем
+        // масштабирует геометрию на |q|^2.
         Matrix4x4 rotation = new(
             matrix.M11 / safeX,
-            matrix.M12 / safeY,
-            matrix.M13 / safeZ,
+            matrix.M12 / safeX,
+            matrix.M13 / safeX,
             matrix.M14,
-            matrix.M21 / safeX,
+            matrix.M21 / safeY,
             matrix.M22 / safeY,
-            matrix.M23 / safeZ,
+            matrix.M23 / safeY,
             matrix.M24,
-            matrix.M31 / safeX,
-            matrix.M32 / safeY,
+            matrix.M31 / safeZ,
+            matrix.M32 / safeZ,
             matrix.M33 / safeZ,
             matrix.M34,
             matrix.M41,

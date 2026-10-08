@@ -121,6 +121,16 @@ public static class Interpolation
         ref float velocity)
     {
         smoothTime = MathF.Max(0.0001f, smoothTime);
+
+        if (deltaTime <= 0f)
+        {
+            // Без этого шага деление velocity = (output - originalTo) /
+            // deltaTime ниже даёт 0/0 = NaN, и NaN записывается в ref-параметр
+            // навсегда: все последующие вызовы возвращают NaN. Покой и пауза —
+            // обычные случаи, а не крайние.
+            return current;
+        }
+
         float omega = 2f / smoothTime;
 
         float exponent = 1f / (1f + omega * deltaTime);
@@ -186,7 +196,8 @@ public static class Interpolation
     }
 
     /// <summary>
-    /// Переносит значение из одного диапазона в другой.
+    /// Переносит значение из одного диапазона в другой с ограничением
+    /// целевым диапазоном.
     /// </summary>
     /// <param name="value">Исходное значение.</param>
     /// <param name="fromMin">Нижняя граница исходного диапазона.</param>
@@ -195,6 +206,20 @@ public static class Interpolation
     /// <param name="toMax">Верхняя граница целевого диапазона.</param>
     /// <returns>Значение в целевом диапазоне.</returns>
     public static float Remap(float value, float fromMin, float fromMax, float toMin, float toMax)
+        => LerpClamped(toMin, toMax, InverseLerp(fromMin, fromMax, value));
+
+    /// <summary>
+    /// Переносит значение из одного диапазона в другой без ограничения:
+    /// значение вне исходного диапазона продолжает линейную зависимость и
+    /// выходит за границы целевого.
+    /// </summary>
+    /// <param name="value">Исходное значение.</param>
+    /// <param name="fromMin">Нижняя граница исходного диапазона.</param>
+    /// <param name="fromMax">Верхняя граница исходного диапазона.</param>
+    /// <param name="toMin">Нижняя граница целевого диапазона.</param>
+    /// <param name="toMax">Верхняя граница целевого диапазона.</param>
+    /// <returns>Линейное продолжение переноса, возможно вне целевого диапазона.</returns>
+    public static float RemapUnclamped(float value, float fromMin, float fromMax, float toMin, float toMax)
         => LerpUnclamped(toMin, toMax, InverseLerp(fromMin, fromMax, value));
 
     /// <summary>

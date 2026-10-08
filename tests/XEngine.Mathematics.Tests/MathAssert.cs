@@ -29,9 +29,14 @@ public static class MathAssert
     /// <param name="expected">Ожидаемое значение.</param>
     /// <param name="actual">Полученное значение.</param>
     /// <param name="tolerance">Допуск.</param>
+    /// <remarks>
+    /// NaN проваливает проверку, а не проходит её. Принимать NaN за равенство
+    /// нельзя: именно получением NaN проявляются деление на ноль и 0/0, и
+    /// такой допуск делал бы тесты зелёными на самых дорогих дефектах.
+    /// </remarks>
     public static void Equal(float expected, float actual, float tolerance = Tolerance)
         => Assert.True(
-            float.IsNaN(actual) || MathF.Abs(expected - actual) <= tolerance,
+            !float.IsNaN(actual) && MathF.Abs(expected - actual) <= tolerance,
             $"Ожидалось {expected} с допуском {tolerance}, получено {actual}.");
 
     /// <summary>

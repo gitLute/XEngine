@@ -25,11 +25,19 @@ public static class VectorExtensions
     public static Vector2 Rotate(this Vector2 vector, Angle angle) => angle.Rotate(vector);
 
     /// <summary>
-    /// Возвращает вектор той же длины, направленный по заданному углу.
+    /// Возвращает вектор той же длины с заданным направлением. Направление
+    /// исходного вектора на результат не влияет: вместо поворота ему
+    /// присваивается <paramref name="angle"/>.
     /// </summary>
-    /// <param name="vector">Исходный вектор.</param>
+    /// <param name="vector">Исходный вектор; используется только его длина.</param>
     /// <param name="angle">Целевое направление.</param>
     /// <returns>Вектор той же длины под заданным углом.</returns>
+    /// <remarks>
+    /// Не путать с <see cref="Angle.RotateDirection"/>, который именно
+    /// поворачивает направление, и с <c>Angle.Rotate</c>, который поворачивает
+    /// вектор целиком, сохраняя длину. Совпадения результатов на отдельных
+    /// входах случайны.
+    /// </remarks>
     public static Vector2 RotateDirection(this Vector2 vector, Angle angle)
         => angle.Direction * vector.Length();
 
@@ -48,12 +56,17 @@ public static class VectorExtensions
     public static Angle ToAngle(this Vector2 vector) => Angle.FromDirection(vector);
 
     /// <summary>
-    /// Возвращает нормализованный вектор. Нулевой вектор остаётся нулевым.
+    /// Возвращает нормализованный вектор. Настоящий нулевой вектор остаётся
+    /// нулевым.
     /// </summary>
     /// <param name="vector">Исходный вектор.</param>
-    /// <returns>Вектор единичной длины.</returns>
+    /// <returns>Вектор единичной длины либо нулевой.</returns>
+    /// <remarks>
+    /// Проверяется именно ноль, а не длина меньше Scalar.Epsilon: см.
+    /// <see cref="Vector3Extensions.SafeNormalize"/>.
+    /// </remarks>
     public static Vector2 SafeNormalize(this Vector2 vector)
-        => vector.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon ? Vector2.Zero : Vector2.Normalize(vector);
+        => vector == Vector2.Zero ? Vector2.Zero : Vector2.Normalize(vector);
 
     /// <summary>
     /// Ограничивает длину вектора сверху.

@@ -53,8 +53,12 @@ public sealed class XorShift64Star : IRandomSource
                 "Верхняя граница должна быть больше нижней.");
         }
 
-        ulong range = (ulong)(maxExclusive - minInclusive);
-        return (int)(minInclusive + (long)(NextUInt64() % range));
+        // Размах обязан считаться в long: разность int переполняется при диапазоне
+        // шире int.MaxValue (например, NextInt(int.MinValue, int.MaxValue) даёт
+        // -1) и превращается в огромный ulong, из которого возвращается
+        // произвольное значение, в том числе отрицательное.
+        ulong range = (ulong)((long)maxExclusive - minInclusive);
+        return (int)((long)minInclusive + (long)(NextUInt64() % range));
     }
 
     /// <inheritdoc/>

@@ -19,6 +19,19 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
         Max = Vector2.Max(min, max);
     }
 
+    private Aabb2(Vector2 min, Vector2 max, EmptyMarker marker)
+    {
+        _ = marker;
+        Min = min;
+        Max = max;
+    }
+
+    /// <summary>
+    /// Метка пустого AABB: нужна, чтобы <see cref="Empty"/> не проходил проверку
+    /// размера, где минимум больше максимума намеренно.
+    /// </summary>
+    private readonly struct EmptyMarker;
+
     /// <summary>
     /// Создаёт вырожденный AABB в точке бесконечности: такой прямоугольник пуст
     /// и используется как начальное значение при поиске границ.
@@ -79,12 +92,15 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     public static Aabb2 FromRect(Rect rect) => new(rect.Position, rect.Position + rect.Size);
 
     /// <summary>
-    /// Пустой AABB, не содержащий ни одной конечной точки.
-    /// Конструктор гарантирует <c>Min &lt;= Max</c>, поэтому «перевёрнутый» прямоугольник
-    /// использовать нельзя: пустой AABB — это вырожденная точка на бесконечности,
-    /// которая не содержится ни в одном запросе и поглощается при объединении.
+    /// Пустой AABB, не содержащий ни одной точки.
+    /// Границы намеренно переставлены: так пустой AABB отличается от
+    /// вырожденного в точку и от AABB нулевой площади, а
+    /// <see cref="Union"/> поглощает его, возвращая второй операнд.
     /// </summary>
-    public static Aabb2 Empty => new(float.PositiveInfinity);
+    public static Aabb2 Empty => new(
+        new Vector2(float.PositiveInfinity),
+        new Vector2(float.NegativeInfinity),
+        default(EmptyMarker));
 
     /// <summary>
     /// Минимальная точка.
@@ -112,9 +128,16 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     public Vector2 Center => (Min + Max) * 0.5f;
 
     /// <summary>
-    /// Признак вырожденного или пустого AABB.
+    /// Признак пустого AABB: параллелепипед переставлен хотя бы по одной оси.
     /// </summary>
-    public bool IsEmpty => Max.X <= Min.X || Max.Y <= Min.Y;
+    /// <remarks>
+    /// Сравнение строгое, как в <see cref="Aabb3.IsEmpty"/>: AABB нулевой площади —
+    /// это обычный коллайдер-линия или плоскость, а не пустое значение. При
+    /// нестрогом сравнении <see cref="Union"/> выбрасывал бы такие боксы из
+    /// широкой фазы, и объект, стоящий ровно на границе, переставал бы
+    /// участвовать в отсечении.
+    /// </remarks>
+    public bool IsEmpty => Max.X < Min.X || Max.Y < Min.Y;
 
     /// <summary>
     /// Проверяет, находится ли точка внутри.
@@ -164,8 +187,18 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// Расширяет AABB на отступ по обеим осям.
     /// </summary>
     /// <param name="amount">Отступ.</param>
-    /// <returns>Расширенный AABB.</returns>
-    public Aabb2 Expand(Vector2 amount) => new(Min - amount, Max + amount);
+    /// <returns>Расширённый AABB.</returns>
+    /// <remarks>
+    /// Отступ, превышающий половину размера по какой-либо оси, схлопывает AABB
+    /// в точку на этой оси, а не переворачивает его: конструктор нормализует
+    /// границы, поэтому наивный min/max из пересекшихся границ дал бы бокс
+    /// больше исходного. Ведёт себя так же, как <see cref="Aabb3.Expand"/>.
+    /// </remarks>
+    public Aabb2 Expand(Vector2 amount)
+    {
+        Vector2 center = (Min + Max) * 0.5f;
+        return new Aabb2(Vector2.Min(Min - amount, center), Vector2.Max(Max + amount, center));
+    }
 
     /// <summary>
     /// Возвращает ближайшую точку AABB к заданной точке.
@@ -186,19 +219,35 @@ public readonly struct Aabb2 : IEquatable<Aabb2>
     /// Преобразует AABB в прямоугольник.
     /// </summary>
     /// <returns>Прямоугольник с теми же границами.</returns>
-    public Rect ToRect() => new(Min, Max);
+    /// <remarks>
+    /// Размер считается вычитанием: конструктор <see cref="Rect"/> принимает
+    /// (позиция, размер), а <see cref="Max"/> — это координата угла, а не
+    /// длина стороны. Передача <c>Max</c> в конструктор давала бы размер,
+    /// равный координате, то есть тем больше, чем дальше прямоугольник от
+    /// начала координат.
+    /// </remarks>
+    public Rect ToRect() => new(Min, Max - Min);
 
     /// <summary>
     /// Углы AABB в порядке: левый нижний, правый нижний, правый верхний, левый верхний.
     /// </summary>
-    /// <returns>Четыре точки углов.</returns>
-    public Vector2[] GetCorners() =>
-    [
-        new(Min.X, Min.Y),
-        new(Max.X, Min.Y),
-        new(Max.X, Max.Y),
-        new(Min.X, Max.Y),
-    ];
+    /// <param name="destination">
+    /// Буфер на четыре элемента. Метод не выделяет память: углы нужны в
+    /// горячем пути, а массив на каждый вызов означал бы мусор в кадре (17.3).
+    /// </param>
+    /// <exception cref="ArgumentException">В буфере меньше четырёх элементов.</exception>
+    public void GetCorners(Span<Vector2> destination)
+    {
+        if (destination.Length < 4)
+        {
+            throw new ArgumentException("Буфер должен вмещать четыре угла.", nameof(destination));
+        }
+
+        destination[0] = new Vector2(Min.X, Min.Y);
+        destination[1] = new Vector2(Max.X, Min.Y);
+        destination[2] = new Vector2(Max.X, Max.Y);
+        destination[3] = new Vector2(Min.X, Max.Y);
+    }
 
     /// <inheritdoc/>
     public bool Equals(Aabb2 other) => Min.Equals(other.Min) && Max.Equals(other.Max);

@@ -71,7 +71,15 @@ public readonly struct Capsule2 : IEquatable<Capsule2>
     /// </summary>
     /// <param name="point">Проверяемая точка.</param>
     /// <returns><c>true</c>, если точка внутри.</returns>
-    public bool Contains(Vector2 point) => Segment2.DistanceTo(point) <= Radius;
+    /// <remarks>
+    /// Сравниваются квадраты расстояний, а не расстояния: корень здесь не
+    /// нужен, а проверка попадания точки в капсулу идёт на каждый запрос.
+    /// </remarks>
+    public bool Contains(Vector2 point)
+    {
+        Vector2 closest = Segment2.ClosestPointTo(point);
+        return (point - closest).LengthSquared() <= Radius * Radius;
+    }
 
     /// <summary>
     /// Возвращает ближайшую к заданной точку границы капсулы.

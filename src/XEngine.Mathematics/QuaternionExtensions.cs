@@ -102,13 +102,20 @@ public static class QuaternionExtensions
     /// <summary>
     /// Строит поворот, в котором локальная ось Z смотрит вдоль
     /// <paramref name="forward"/>, а локальная ось Y — в сторону
-    /// <paramref name="up"/>. Та же конвенция, что у
-    /// <c>Matrix4x4Extensions.CreateLookAt</c> и вида камеры.
+    /// <paramref name="up"/>.
     /// </summary>
     /// <param name="forward">Направление взгляда, ненулевое и не параллельное вертикали.</param>
     /// <param name="up">Направление вверх, ненулевое и не параллельное направлению взгляда.</param>
     /// <returns>Поворот.</returns>
     /// <exception cref="ArgumentException">Направление нулевое или совпадает с вертикалью.</exception>
+    /// <remarks>
+    /// Здесь ось Z направлена <em>вперёд</em>, по направлению взгляда, а у
+    /// матрицы вида ось Z направлена <em>назад</em> (см. remarks
+    /// <see cref="Matrix4x4Extensions.CreateLookAt"/>). Это разные конвенции, и
+    /// обратным к матрице вида является не этот поворот, а разворот на 180°
+    /// вокруг Y: подставлять <c>LookRotation(forward, up)</c> вместо ориентации
+    /// из матрицы вида разворачивает объект спиной к камере.
+    /// </remarks>
     public static Quaternion LookRotation(Vector3 forward, Vector3 up)
     {
         Vector3 unitForward = forward.SafeNormalize();
@@ -183,10 +190,27 @@ public static class QuaternionExtensions
     /// </remarks>
     public static Angle AngleBetween(Quaternion from, Quaternion to)
     {
-        float dot = MathF.Abs(Vector4.Dot(
-            new Vector4(Normalize(from).X, Normalize(from).Y, Normalize(from).Z, Normalize(from).W),
-            new Vector4(to.X, to.Y, to.Z, to.W)));
-        return Angle.FromRadians(2.0 * Math.Acos(Scalar.Clamp(dot, -1f, 1f)));
+        // Нормализовать нужно оба операнда: скалярное произведение
+        // неоднородно, и при |to| != 1 угол между ориентациями получается
+        // завышенным (AngleBetween(identity, 0.5 * поворот) давал 138.6°).
+        //
+        // Угол считается через относительный поворот to ⊗ conj(from): у
+        // единичного кватерниона угол поворота равен 2 * atan2(|w|, ‖векторная
+        // часть|), то есть половина угла есть atan2(‖v‖, |w|), поскольку
+        // tan(θ/2) = ‖v‖ / |w|.
+        //
+        // Формула через acos от скалярного произведения не годится: у малого
+        // угла скалярное произведение отличается от единицы на величину порядка
+        // θ², во float это различие меньше эпсилон, и угол возвращался ровно
+        // нулём для всех углов меньше примерно 0.01°. atan2 сохраняет
+        // относительную точность, потому что зависит от θ линейно.
+        Quaternion relative = Quaternion.Multiply(Normalize(to), Conjugate(Normalize(from)));
+
+        float vectorPartSquared =
+            (relative.X * relative.X) + (relative.Y * relative.Y) + (relative.Z * relative.Z);
+        float halfAngle = MathF.Atan2(MathF.Sqrt(vectorPartSquared), MathF.Abs(relative.W));
+
+        return Angle.FromRadians(2.0 * halfAngle);
     }
 
     /// <summary>
