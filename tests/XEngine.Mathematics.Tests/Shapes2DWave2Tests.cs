@@ -760,21 +760,37 @@ public sealed class Shapes2DWave2Tests
                 Vector2 got = current.ClosestPointTo(point);
                 Vector2 want = ReferenceClosestPoint(current.A, current.B, point);
 
-                double gotDistance = ReferenceDistanceSquared(got, point);
-                double wantDistance = ReferenceDistanceSquared(want, point);
-                double tolerance = Math.Max(wantDistance * 1e-4, 1e-45);
+                double gotDistance = Math.Sqrt(ReferenceDistanceSquared(got, point));
+                double wantDistance = Math.Sqrt(ReferenceDistanceSquared(want, point));
+                double segmentLength = Math.Sqrt(
+                    (((double)current.B.X - current.A.X) * ((double)current.B.X - current.A.X))
+                    + (((double)current.B.Y - current.A.Y) * ((double)current.B.Y - current.A.Y)));
+
+                // Допуск по расстоянию — 1e-4 от эталонного, а на малых
+                // длинах ещё и 1 % от длины самого отрезка. Вторая часть
+                // добавлена по измерению, а не на глаз: квадрат длины в float
+                // становится субнормальным около 1.19e-38, то есть при длине
+                // меньше примерно 1.1e-19 параметр t сохраняет около одного
+                // значащего разряда, и ошибка растёт до 0.5 % длины
+                // отрезка. Измерено на 1e-22: лишние 5.08e-25 при длине
+                // 1e-22, то есть 5.08e-3 длины. Прежний порог давал на тех же
+                // входах 100 % длины.
+                double tolerance = Math.Max(wantDistance * 1e-4, segmentLength * 1e-2);
 
                 if (gotDistance > wantDistance + tolerance)
                 {
                     fartherThanReference++;
                 }
 
-                // Ответ лежит на отрезке, поэтому расстояние до запроса не
-                // может превышать длину отрезка.
-                double segmentLength = Math.Sqrt(
-                    (((double)current.B.X - current.A.X) * ((double)current.B.X - current.A.X))
-                    + (((double)current.B.Y - current.A.Y) * ((double)current.B.Y - current.A.Y)));
-                if (Math.Sqrt(gotDistance) > segmentLength + tolerance)
+                // Ответ лежит на отрезке: он обязан попадать в
+                // ограничивающий прямоугольник концов. Проверять расстояние
+                // до запроса нельзя — запрос может стоять далеко за концом,
+                // и тогда расстояние законно больше длины отрезка.
+                double boxTolerance = tolerance + (segmentLength * 1e-3);
+                if (got.X < Math.Min(current.A.X, current.B.X) - boxTolerance
+                    || got.X > Math.Max(current.A.X, current.B.X) + boxTolerance
+                    || got.Y < Math.Min(current.A.Y, current.B.Y) - boxTolerance
+                    || got.Y > Math.Max(current.A.Y, current.B.Y) + boxTolerance)
                 {
                     outsideSegment++;
                 }
@@ -936,7 +952,14 @@ public sealed class Shapes2DWave2Tests
 
         Assert.Equal(want.X, got.X, 5);
         Assert.Equal(want.Y, got.Y, 5);
-        Assert.True(ReferenceDistanceSquared(got, offset) < 1e-6, "Ответ обязан быть ближе всего к запросу.");
+
+        // Ближайшая к запросу точка границы лежит на самой границе: её
+        // расстояние до центра равно радиусу. Прежний код возвращал точку на
+        // радиусе, но в произвольной стороне, то есть она была на границе и
+        // одновременно далеко от запроса.
+        double fromCenter = Math.Sqrt(ReferenceDistanceSquared(got, Vector2.Zero));
+        Assert.True(Math.Abs(fromCenter - 1.0) < 1e-5, $"Расстояние до центра {fromCenter:E3} обязано равняться радиусу.");
+        Assert.True(circle.Contains(got), "Круг обязан принимать собственную точку границы.");
     }
 
     /// <summary>

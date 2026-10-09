@@ -11,13 +11,25 @@ public readonly struct Circle2 : IEquatable<Circle2>
     /// Создаёт круг.
     /// </summary>
     /// <param name="center">Центр круга.</param>
-    /// <param name="radius">Радиус. Отрицательные значения не допускаются.</param>
-    /// <exception cref="ArgumentOutOfRangeException">Радиус отрицательный.</exception>
+    /// <param name="radius">
+    /// Радиус. Отрицательные и нечисловые значения не допускаются.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Радиус отрицательный или равен <see cref="float.NaN"/>.
+    /// </exception>
+    /// <remarks>
+    /// Проверяется именно <see cref="float.NaN"/>, а не «радиус не конечен»:
+    /// сравнение <c>NaN &lt; 0</c> ложно, и без проверки создавался круг с
+    /// нечисловым радиусом, у которого <see cref="Bounds"/> давал непустой
+    /// бокс из NaN, а <see cref="Contains"/> и <see cref="Intersects"/>
+    /// молча отвечали false. Бесконечный радиус не бессмыслен — круг
+    /// покрывает всю плоскость, — и отвергать его незачем.
+    /// </remarks>
     public Circle2(Vector2 center, float radius)
     {
-        if (radius < 0f)
+        if (radius < 0f || float.IsNaN(radius))
         {
-            throw new ArgumentOutOfRangeException(nameof(radius), radius, "Радиус не может быть отрицательным.");
+            throw new ArgumentOutOfRangeException(nameof(radius), radius, "Радиус должен быть неотрицательным и не быть NaN.");
         }
 
         Center = center;
@@ -77,9 +89,22 @@ public readonly struct Circle2 : IEquatable<Circle2>
     public Vector2 ClosestPointOnBoundary(Vector2 point)
     {
         Vector2 delta = point - Center;
-        return delta.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon
+
+        // Порог заменён на точный ноль. Прежняя проверка
+        // delta.LengthSquared() <= Epsilon² отсекала любой смещение меньше
+        // 1e-6 и возвращала Center + (Radius, 0), то есть произвольное
+        // направление: на смещении 7.07e-7 под 45° ошибка равнялась
+        // 76.54 % радиуса, и не зависела от масштаба круга — её задавал
+        // только порог. При радиусе 1e-6 и меньше неверным было 100 % площади
+        // круга.
+        //
+        // Точный ноль остаётся отдельным случаем осмысленно: у запроса ровно
+        // в центре направления нет, и подходит любая точка границы, поэтому
+        // берётся заранее выбранная. SafeNormalize обнулил бы вектор и вернул
+        // центр, а центр границей не является.
+        return delta == Vector2.Zero
             ? Center + new Vector2(Radius, 0f)
-            : Center + Vector2.Normalize(delta) * SurfaceRadius.For(Radius, Center);
+            : Center + (delta.SafeNormalize() * SurfaceRadius.For(Radius, Center));
     }
 
 

@@ -11,13 +11,23 @@ public readonly struct Capsule2 : IEquatable<Capsule2>
     /// Создаёт капсулу из отрезка и радиуса.
     /// </summary>
     /// <param name="segment">Осевая линия капсулы.</param>
-    /// <param name="radius">Радиус. Отрицательные значения не допускаются.</param>
-    /// <exception cref="ArgumentOutOfRangeException">Радиус отрицательный.</exception>
+    /// <param name="radius">Радиус. Отрицательные и нечисловые значения не допускаются.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Радиус отрицательный или равен <see cref="float.NaN"/>.
+    /// </exception>
+    /// <remarks>
+    /// Проверяется именно <see cref="float.NaN"/>, а не «радиус не конечен»:
+    /// сравнение <c>NaN &lt; 0</c> ложно, и без проверки создавалась капсула с
+    /// нечисловым радиусом, у которой <see cref="Bounds"/> и
+    /// <see cref="Contains"/> молча давали мусор. Бесконечный радиус при этом
+    /// не бессмыслен — капсула покрывает всю плоскость, — и отвергать его
+    /// незачем.
+    /// </remarks>
     public Capsule2(Segment2 segment, float radius)
     {
-        if (radius < 0f)
+        if (radius < 0f || float.IsNaN(radius))
         {
-            throw new ArgumentOutOfRangeException(nameof(radius), radius, "Радиус не может быть отрицательным.");
+            throw new ArgumentOutOfRangeException(nameof(radius), radius, "Радиус должен быть неотрицательным и не быть NaN.");
         }
 
         Segment2 = segment;
@@ -30,8 +40,27 @@ public readonly struct Capsule2 : IEquatable<Capsule2>
     /// </summary>
     /// <param name="bounds">Ограничивающий прямоугольник.</param>
     /// <returns>Капсула внутри прямоугольника.</returns>
+    /// <remarks>
+    /// Пустой <see cref="Aabb2"/> обрабатывается отдельно. У пустого бокса
+    /// <see cref="Aabb2.Size"/> равен <c>(−∞, −∞)</c>, отсюда
+    /// <c>radius = −∞</c>, и конструктор справедливо его отвергал — но
+    /// собственное пустое значение библиотеки роняло соседнюю фабрику на
+    /// законном вызове. Поведение согласовано с
+    /// <c>BoundingSphere.FromAabb(Aabb3.Empty)</c>: вырожденная капсула нулевого
+    /// радиуса в центре пустого бокса.
+    /// <para>
+    /// Отдельно проверено, что вырожденный бокс нулевой площади — не пустой:
+    /// у него есть размер по одной оси, и он обязан обрабатываться как
+    /// обычный.
+    /// </para>
+    /// </remarks>
     public static Capsule2 FromBounds(Aabb2 bounds)
     {
+        if (bounds.IsEmpty)
+        {
+            return new Capsule2(new Segment2(Vector2.Zero, Vector2.Zero), 0f);
+        }
+
         Vector2 size = bounds.Size;
         float radius = MathF.Min(size.X, size.Y) * 0.5f;
         Vector2 halfDelta = new(
@@ -74,6 +103,13 @@ public readonly struct Capsule2 : IEquatable<Capsule2>
     /// <remarks>
     /// Сравниваются квадраты расстояний, а не расстояния: корень здесь не
     /// нужен, а проверка попадания точки в капсулу идёт на каждый запрос.
+    /// <para>
+    /// Порога вырожденности у самого метода нет: он спрашивает о расстоянии до
+    /// ближайшей точки <see cref="Segment2"/>. Ошибка на короткой оси приходила
+    /// именно оттуда — при оси короче 1e-6 ближайшей точкой подставлялся конец
+    /// A вместо проекции, и вердикт о попадании не зависел от масштаба. После
+    /// правки <see cref="Segment2.ClosestPointTo"/> зависимости не осталось.
+    /// </para>
     /// </remarks>
     public bool Contains(Vector2 point)
     {
@@ -96,9 +132,16 @@ public readonly struct Capsule2 : IEquatable<Capsule2>
     {
         Vector2 closest = Segment2.ClosestPointTo(point);
         Vector2 delta = point - closest;
-        return delta.LengthSquared() <= Scalar.Epsilon * Scalar.Epsilon
+
+        // Порог заменён на точный ноль, как в Circle2 и Segment2. Прежняя
+        // проверка delta.LengthSquared() <= Epsilon² отсекала любое смещение
+        // меньше 1e-6 и возвращала closest + (Radius, 0): на запросе в 4e-7 от
+        // оси ошибка равнялась 141.42 % радиуса, потому что возвращённая точка
+        // оказывалась по другую сторону оси. Точный ноль — это запрос ровно на
+        // оси: направления нет, подходит любая точка границы.
+        return delta == Vector2.Zero
             ? closest + new Vector2(Radius, 0f)
-            : closest + Vector2.Normalize(delta) * SurfaceRadius.For(Radius, closest);
+            : closest + (delta.SafeNormalize() * SurfaceRadius.For(Radius, closest));
     }
 
 

@@ -104,15 +104,40 @@ public readonly struct RectU : IEquatable<RectU>
     /// <summary>
     /// Проверяет принадлежность пикселя прямоугольнику.
     /// </summary>
+    /// <remarks>
+    /// Правый и нижний край считаются в <c>long</c>, а не через
+    /// <see cref="Right"/> и <see cref="Bottom"/>. Те свойства помечены
+    /// <c>checked</c> и на прямоугольнике у <see cref="int.MaxValue"/>
+    /// бросают исключение, а этот метод обещает <see cref="bool"/> и раньше
+    /// бросал его необъявленно: <c>RectU(int.MaxValue − 2, 0, 4, 4)</c> —
+    /// законно построенный прямоугольник из четырёх пикселей, и
+    /// <c>Area</c> у него равен 16.
+    /// <para>
+    /// Считать в <c>long</c> можно без потери: <c>X + Width − 1</c> при
+    /// <c>int</c>-овских <c>X</c> и <c>Width</c> всегда помещается в
+    /// <c>long</c>, а сравнение <c>int</c> с такой границей даёт тот же
+    /// ответ, что и сравнение в <c>long</c>: любой <see cref="int"/> меньше
+    /// границы, которая за пределами диапазона. Метод стал тотальной
+    /// функцией на своём аргументе, то есть проверка принадлежности больше
+    /// не бросает там, где бросать нечего.
+    /// </para>
+    /// </remarks>
     /// <param name="x">Координата пикселя по горизонтали.</param>
     /// <param name="y">Координата пикселя по вертикали.</param>
     /// <returns><c>true</c>, если пиксель внутри, включая границы.</returns>
     public bool Contains(int x, int y)
-        => !IsEmpty && x >= Left && x <= Right && y >= Top && y <= Bottom;
+        => !IsEmpty
+            && x >= Left && x <= (long)X + Width - 1
+            && y >= Top && y <= (long)Y + Height - 1;
 
     /// <summary>
     /// Проверяет, что прямоугольник целиком внутри другого.
     /// </summary>
+    /// <remarks>
+    /// Границы считаются в <c>long</c> — см. <see cref="Contains(int, int)"/>.
+    /// До правки метод читал <see cref="Right"/> и <see cref="Bottom"/> и бросал
+    /// необъявленный <see cref="OverflowException"/> на законном прямоугольнике.
+    /// </remarks>
     /// <param name="other">Ограничивающий прямоугольник.</param>
     /// <returns><c>true</c>, если прямоугольник внутри.</returns>
     public bool ContainsRect(in RectU other)
@@ -120,26 +145,39 @@ public readonly struct RectU : IEquatable<RectU>
             && !other.IsEmpty
             && other.Left >= Left
             && other.Top >= Top
-            && other.Right <= Right
-            && other.Bottom <= Bottom;
+            && (long)other.X + other.Width - 1 <= (long)X + Width - 1
+            && (long)other.Y + other.Height - 1 <= (long)Y + Height - 1;
 
     /// <summary>
     /// Проверяет, есть ли у прямоугольников хотя бы один общий пиксель.
     /// </summary>
+    /// <remarks>
+    /// Границы считаются в <c>long</c> — см. <see cref="Contains(int, int)"/>.
+    /// До правки метод бросал необъявленный <see cref="OverflowException"/> на
+    /// паре прямоугольников, перекрывающих весь диапазон <see cref="int"/>.
+    /// </remarks>
     /// <param name="other">Другой прямоугольник.</param>
     /// <returns><c>true</c>, если пересечение непустое.</returns>
     public bool Intersects(in RectU other)
         => !IsEmpty
             && !other.IsEmpty
-            && Left <= other.Right
-            && other.Left <= Right
-            && Top <= other.Bottom
-            && other.Top <= Bottom;
+            && (long)Left <= (long)other.X + other.Width - 1
+            && (long)other.X <= (long)X + Width - 1
+            && (long)Top <= (long)other.Y + other.Height - 1
+            && (long)other.Y <= (long)Y + Height - 1;
 
     /// <summary>
     /// Возвращает общую часть прямоугольников. Пересечение пустое, если
     /// общая часть состоит из пустого набора пикселей.
     /// </summary>
+    /// <remarks>
+    /// Границы считаются в <c>long</c> — см. <see cref="Contains(int, int)"/>.
+    /// Ширина результата при этом не может выйти за пределы <see cref="int"/>:
+    /// она не больше <c>Width</c> каждого из операндов, потому что
+    /// <c>right</c> берётся минимумом, а <c>left</c> максимумом. Поэтому
+    /// сужение здесь не может бросить исключение, и метод, как и предикаты,
+    /// отвечает на любой законно построенной паре.
+    /// </remarks>
     /// <param name="other">Другой прямоугольник.</param>
     /// <returns>Пересечение или <see cref="Empty"/>.</returns>
     public RectU Intersection(in RectU other)
@@ -149,18 +187,35 @@ public readonly struct RectU : IEquatable<RectU>
             return Empty;
         }
 
-        int left = Math.Max(Left, other.Left);
-        int top = Math.Max(Top, other.Top);
-        int right = Math.Min(Right, other.Right);
-        int bottom = Math.Min(Bottom, other.Bottom);
-        return new RectU(left, top, right - left + 1, bottom - top + 1);
+        long left = Math.Max((long)Left, other.Left);
+        long top = Math.Max((long)Top, other.Top);
+        long right = Math.Min((long)X + Width - 1, (long)other.X + other.Width - 1);
+        long bottom = Math.Min((long)Y + Height - 1, (long)other.Y + other.Height - 1);
+        return new RectU((int)left, (int)top, (int)(right - left + 1), (int)(bottom - top + 1));
     }
 
     /// <summary>
     /// Возвращает наименьший прямоугольник, содержащий оба.
     /// </summary>
+    /// <remarks>
+    /// Пустое значение поглощается, как в <see cref="Aabb2.Union"/> и в
+    /// <see cref="Rect.Union"/>.
+    /// <para>
+    /// В отличие от пересечения, объединение <b>может</b> не поместиться в
+    /// тип: два прямоугольника у краёв диапазона дают ширину больше
+    /// <see cref="int.MaxValue"/>, и результата у типа просто нет. Прежний
+    /// код при этом бросал <see cref="ArgumentOutOfRangeException"/> из
+    /// конструктора с переполненной (отрицательной) шириной, то есть
+    /// исключение указывало на параметр, который вызывающий не задавал.
+    /// Теперь это объявленный <see cref="OverflowException"/>.
+    /// </para>
+    /// </remarks>
     /// <param name="other">Другой прямоугольник.</param>
     /// <returns>Объединение прямоугольников.</returns>
+    /// <exception cref="OverflowException">
+    /// Объединение шире <see cref="int.MaxValue"/> пикселей и не представимо
+    /// в типе.
+    /// </exception>
     public RectU Union(in RectU other)
     {
         if (IsEmpty)
@@ -173,21 +228,42 @@ public readonly struct RectU : IEquatable<RectU>
             return this;
         }
 
-        int left = Math.Min(Left, other.Left);
-        int top = Math.Min(Top, other.Top);
-        int right = Math.Max(Right, other.Right);
-        int bottom = Math.Max(Bottom, other.Bottom);
-        return new RectU(left, top, right - left + 1, bottom - top + 1);
+        long left = Math.Min((long)Left, other.Left);
+        long top = Math.Min((long)Top, other.Top);
+        long right = Math.Max((long)X + Width - 1, (long)other.X + other.Width - 1);
+        long bottom = Math.Max((long)Y + Height - 1, (long)other.Y + other.Height - 1);
+        long width = right - left + 1;
+        long height = bottom - top + 1;
+
+        if (width > int.MaxValue || height > int.MaxValue)
+        {
+            throw new OverflowException("Объединение прямоугольников не помещается в int по размеру.");
+        }
+
+        return new RectU((int)left, (int)top, (int)width, (int)height);
     }
 
     /// <summary>
     /// Смещает прямоугольник, не меняя размера.
     /// </summary>
+    /// <remarks>
+    /// Сложение помечено <c>checked</c> — политика типа объявлена в доктрине
+    /// <see cref="Area"/>. Прежняя запись была единственной арифметикой типа без
+    /// пометки, и при переполнении молча заворачивала результат:
+    /// <c>RectU(int.MaxValue − 100, …).Offset(200, 0)</c> давал
+    /// <c>X = −2147483549</c>, то есть смещение на 200 пикселей вправо
+    /// обращалось в смещение влево.
+    /// </remarks>
     /// <param name="offsetX">Смещение по горизонтали.</param>
     /// <param name="offsetY">Смещение по вертикали.</param>
     /// <returns>Смещённый прямоугольник.</returns>
+    /// <exception cref="OverflowException">
+    /// Смещение выводит координату за пределы <see cref="int"/>.
+    /// </exception>
     public RectU Offset(int offsetX, int offsetY)
-        => IsEmpty ? this : new RectU(X + offsetX, Y + offsetY, Width, Height);
+        => IsEmpty
+            ? this
+            : new RectU(checked(X + offsetX), checked(Y + offsetY), Width, Height);
 
     /// <inheritdoc/>
     public bool Equals(RectU other)
