@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace XEngine.Mathematics;
 
@@ -514,7 +515,13 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="left">Первый угол.</param>
     /// <param name="right">Второй угол.</param>
     /// <returns>Результат сравнения.</returns>
-    public static bool operator <(Angle left, Angle right) => CompareRadians(left._radians, right._radians) < 0;
+    /// <remarks>
+    /// Добавка зеркальна к <c>&gt;</c>: нечисловой радиан больше любого числа,
+    /// поэтому меньше него всякий сравнимый. Случай «оба нечисловые» сюда не
+    /// попадает, потому что они равны.
+    /// </remarks>
+    public static bool operator <(Angle left, Angle right)
+        => left._radians < right._radians || IsNaNAndNot(right._radians, left._radians);
 
     /// <summary>
     /// Сравнивает углы: больше, если радианы больше.
@@ -522,7 +529,8 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="left">Первый угол.</param>
     /// <param name="right">Второй угол.</param>
     /// <returns>Результат сравнения.</returns>
-    public static bool operator >(Angle left, Angle right) => CompareRadians(left._radians, right._radians) > 0;
+    public static bool operator >(Angle left, Angle right)
+        => left._radians > right._radians || IsNaNAndNot(left._radians, right._radians);
 
     /// <summary>
     /// Сравнивает углы: меньше или равно.
@@ -530,7 +538,8 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="left">Первый угол.</param>
     /// <param name="right">Второй угол.</param>
     /// <returns>Результат сравнения.</returns>
-    public static bool operator <=(Angle left, Angle right) => CompareRadians(left._radians, right._radians) <= 0;
+    public static bool operator <=(Angle left, Angle right)
+        => left._radians <= right._radians || BothNaN(left._radians, right._radians);
 
     /// <summary>
     /// Сравнивает углы: больше или равно.
@@ -538,7 +547,31 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="left">Первый угол.</param>
     /// <param name="right">Второй угол.</param>
     /// <returns>Результат сравнения.</returns>
-    public static bool operator >=(Angle left, Angle right) => CompareRadians(left._radians, right._radians) >= 0;
+    /// <remarks>
+    /// Добавка одна, а не сравнение с <c>NaN</c> на обоих: по правилу
+    /// упорядочивания нечисловой радиан больше любого числа и равен самому
+    /// себе, то есть «больше или равно» верно для него и когда справа число, и
+    /// когда справа такой же нечисловой.
+    /// </remarks>
+    public static bool operator >=(Angle left, Angle right)
+        => left._radians >= right._radians || double.IsNaN(left._radians);
+
+    /// <summary>
+    /// Радиан нечисловой, а второй сравним с ним.
+    /// </summary>
+    /// <param name="left">Первый радиан.</param>
+    /// <param name="right">Второй радиан.</param>
+    /// <returns><c>true</c>, если <paramref name="left"/> больше <paramref name="right"/> по правилу упорядочивания.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsNaNAndNot(double left, double right)
+        => double.IsNaN(left) && !double.IsNaN(right);
+
+    /// <summary>Оба радиана нечисловые, то есть равны по правилу упорядочивания.</summary>
+    /// <param name="left">Первый радиан.</param>
+    /// <param name="right">Второй радиан.</param>
+    /// <returns><c>true</c>, если оба значения равны <c>NaN</c>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool BothNaN(double left, double right) => double.IsNaN(left) && double.IsNaN(right);
 
     /// <summary>
     /// Упорядочивание радианов: <c>NaN</c> больше любого числа и равен самому
@@ -548,12 +581,13 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="right">Второй радиан.</param>
     /// <returns>Результат сравнения.</returns>
     /// <remarks>
-    /// Обе ветви на числах не доходят до проверки на <c>NaN</c>: если значения
-    /// упорядочиваются обычным сравнением, результат уже известен. На
-    /// нечисловых радианах, то есть на углах из <c>NaN</c>, доходит.
+    /// Три обычных сравнения на числах не доходят до проверки на <c>NaN</c>:
+    /// если значения упорядочиваются, результат уже известен. Доходит
+    /// только нечисловой случай.
     /// <para>
     /// Правило нужно потому, что иначе пять операций сравнения отвечают на
-    /// одну пару по-разному, и сортировка углов зависит от того, чем именно
+    /// одну пару по-разному: <c>CompareTo(NaN, число)</c> давал −1, а <c>&lt;</c>
+    /// и <c>&gt;</c> — ложь, и сортировка углов зависела бы от того, чем именно
     /// сравнивают.
     /// </para>
     /// </remarks>
