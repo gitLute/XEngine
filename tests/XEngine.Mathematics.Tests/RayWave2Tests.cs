@@ -285,6 +285,8 @@ public sealed class RayWave2Tests
         int hits = 0;
         int compared = 0;
         int nearAxis = 0;
+        int mismatches = 0;
+        string firstMismatch = string.Empty;
 
         for (int i = 0; i < 60_000; i++)
         {
@@ -317,9 +319,19 @@ public sealed class RayWave2Tests
             bool expected = Exact(ray.Origin, ray.Direction, min, max);
             bool actual = ray.Intersects(new Aabb2(min, max));
 
-            Assert.True(
-                expected == actual,
-                $"О={ray.Origin} D={ray.Direction} Min={min} Max={max}: эталон {expected}, получено {actual}.");
+            // Внутри цикла только счётчик: xUnit не прерывает цикл на первом
+            // провале, и Assert на каждой из 60 000 итераций при систематическом
+            // расхождении накопил бы 60 000 записей о падении — это выглядит
+            // как зависание раннера, а не как падение теста.
+            if (expected != actual)
+            {
+                mismatches++;
+                if (mismatches == 1)
+                {
+                    firstMismatch = $"О={ray.Origin} D={ray.Direction} Min={min} Max={max}: эталон {expected}, получено {actual}";
+                }
+            }
+
             if (expected)
             {
                 hits++;
@@ -328,8 +340,10 @@ public sealed class RayWave2Tests
             compared++;
         }
 
+        Assert.Equal(0, mismatches);
         Assert.True(nearAxis > 0, "Поток обязан содержать почти осевые лучи, иначе проверка ничего не проверяет.");
         Assert.True(hits > compared / 10, $"Попаданий всего {hits} из {compared}: распределение вырождено.");
+        Assert.True(firstMismatch.Length == 0, firstMismatch);
     }
 
     /// <summary>
@@ -341,6 +355,8 @@ public sealed class RayWave2Tests
         DeterministicRandom random = new(0x6B4D2E8F0A1C3579UL);
         int hits = 0;
         int compared = 0;
+        int mismatches = 0;
+        string firstMismatch = string.Empty;
 
         for (int i = 0; i < 40_000; i++)
         {
@@ -371,9 +387,17 @@ public sealed class RayWave2Tests
             var aabb = new Aabb3(min, max);
             bool actual = ray.Intersects(in aabb);
 
-            Assert.True(
-                expected == actual,
-                $"O={ray.Origin} D={ray.Direction} Min={min} Max={max}: эталон {expected}, получено {actual}.");
+            // Счётчик, а не Assert на каждой итерации: см. пояснение в
+            // Ray2_SlabMatchesExactRationalReference.
+            if (expected != actual)
+            {
+                mismatches++;
+                if (mismatches == 1)
+                {
+                    firstMismatch = $"O={ray.Origin} D={ray.Direction} Min={min} Max={max}: эталон {expected}, получено {actual}";
+                }
+            }
+
             if (expected)
             {
                 hits++;
@@ -382,7 +406,9 @@ public sealed class RayWave2Tests
             compared++;
         }
 
+        Assert.Equal(0, mismatches);
         Assert.True(hits > compared / 10, $"Попаданий всего {hits} из {compared}: распределение вырождено.");
+        Assert.True(firstMismatch.Length == 0, firstMismatch);
     }
 
     // ================= P2-64: NaN в Max/Min открывал защиту =================
@@ -629,6 +655,8 @@ public sealed class RayWave2Tests
         DeterministicRandom random = new(0x77C1D3E5F90A2B48UL);
         int compared = 0;
         int hits = 0;
+        int mismatches = 0;
+        string firstMismatch = string.Empty;
 
         for (int i = 0; i < 40_000; i++)
         {
@@ -645,9 +673,17 @@ public sealed class RayWave2Tests
             bool expected = ReferenceSegment(ray, segment);
             bool actual = ray.Intersects(segment);
 
-            Assert.True(
-                expected == actual,
-                $"Луч из начала координат по X, отрезок на расстоянии {distance} со смещением {lateral}, длиной {length}: эталон {expected}, получено {actual}.");
+            // Счётчик вместо Assert на каждой итерации: см. пояснение в
+            // Ray2_SlabMatchesExactRationalReference.
+            if (expected != actual)
+            {
+                mismatches++;
+                if (mismatches == 1)
+                {
+                    firstMismatch = $"отрезок на расстоянии {distance} со смещением {lateral}, длиной {length}: эталон {expected}, получено {actual}";
+                }
+            }
+
             if (actual)
             {
                 hits++;
@@ -656,8 +692,10 @@ public sealed class RayWave2Tests
             compared++;
         }
 
+        Assert.Equal(0, mismatches);
         Assert.True(hits > 0, "Сравнение обязано содержать попадания, иначе оно тривиально.");
         Assert.True(hits < compared, "Сравнение обязано содержать промахи, иначе оно тривиально.");
+        Assert.True(firstMismatch.Length == 0, firstMismatch);
     }
 
     /// <summary>
