@@ -46,16 +46,26 @@ public static class Scalar
     /// <param name="value">Исходное значение.</param>
     /// <param name="step">Шаг. Должен быть больше нуля.</param>
     /// <returns>Значение, округлённое до кратного шага.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Шаг меньше или равен нулю.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Шаг не больше нуля, а также нечисловой шаг.
+    /// </exception>
     /// <remarks>
+    /// Проверка записана как <c>!(step &gt; 0f)</c>, а не как <c>step &lt;= 0</c>,
+    /// чтобы отвергался и <c>NaN</c>. При <c>step &lt;= 0</c> нечисловой шаг
+    /// проходил проверку и метод возвращал <c>NaN</c> без исключения, хотя
+    /// доктрина требует шаг больше нуля; <c>Snap(7, NaN)</c> и
+    /// <c>Snap(7, -2f)</c> отвечали по-разному при одном и том же нарушении
+    /// контракта. Приём тот же, что в <c>NextWeightedIndex</c>.
+    /// <para>
     /// Результат не зависит от того, округляется в float или в double: частное
     /// <c>value / step</c> и так считается в float, и до double доходит уже
     /// округлённое значение. Вызов <see cref="MathF.Round(float, MidpointRounding)"/>
     /// выбран потому, что не тащит значение в double и обратно без нужды.
+    /// </para>
     /// </remarks>
     public static float Snap(float value, float step)
     {
-        if (step <= 0)
+        if (!(step > 0f))
         {
             throw new ArgumentOutOfRangeException(nameof(step), step, "Шаг должен быть больше нуля.");
         }

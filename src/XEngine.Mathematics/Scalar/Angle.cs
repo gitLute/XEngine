@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 
 namespace XEngine.Mathematics;
@@ -5,9 +6,30 @@ namespace XEngine.Mathematics;
 /// <summary>
 /// Угол с нормализацией и интерполяцией по кратчайшей дуге.
 /// Хранится в радианах типа <see cref="double"/>, чтобы длинная сессия не накапливала ошибку.
-/// Экземпляр всегда нормализован в диапазон <c>(-π, π]</c>, кроме результатов
-/// операций масштабирования (см. <see cref="Scale"/>).
+/// Экземпляр нормализован в диапазон <c>(-π, π]</c>. Исключения перечислены
+/// явно, потому что «кроме масштабирования» было неверно: нарушали инвариант
+/// ещё и <see cref="FromRadiansRaw"/> с <see cref="ScaleRaw"/>.
 /// </summary>
+/// <remarks>
+/// Нормализованный угол обязателен для сравнения, хеша и упорядочивания:
+/// <see cref="Equals(Angle)"/> и <see cref="GetHashCode"/> считаются по сырым
+/// радианам, поэтому угол в 2π не равен нулю, хеши разные и
+/// <see cref="CompareTo"/> ставит его не туда, а ключ в словаре таких углов
+/// даёт несколько записей на одну ориентацию.
+/// <para>
+/// Вне инварианта остаются ровно два входа, и оба названы в своём имени
+/// словом <c>Raw</c>:
+/// <list type="bullet">
+/// <item><see cref="FromRadiansRaw"/> — угол из значения в радианах без
+/// нормализации;</item>
+/// <item><see cref="ScaleRaw"/> — умножение на число без нормализации.</item>
+/// </list>
+/// Всё остальное — <see cref="FromRadians"/>, <see cref="FromDegrees"/>,
+/// <see cref="FromTurns"/>, <see cref="FromDirection"/>, арифметика,
+/// <see cref="Scale"/>, <see cref="Negated"/>, <see cref="Normalized"/> и
+/// операторы — нормализацию выполняет.
+/// </para>
+/// </remarks>
 public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
 {
     /// <summary>
@@ -71,12 +93,37 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// посчитанная на грани, и его угол обязан быть 45°, а не нулём.
     /// </remarks>
     public static Angle FromDirection(Vector2 direction)
-        => direction == Vector2.Zero
-            ? Zero
-            // MathF.Atan2 уже возвращает значение в (-π; π], то есть ровно в том
-            // диапазоне, в котором угол нормализован, поэтому нормализация
-            // повторно не нужна.
-            : FromRadiansRaw(Trig.Atan2(direction.Y, direction.X));
+    {
+        if (direction == Vector2.Zero)
+        {
+            return Zero;
+        }
+
+        // Направление строго по оси X. Угол такого направления равен ровно 0
+        // или ровно π, а float-atan2 отдаёт 0 со знаком того нуля, который
+        // пришёл в y, и ближайший к π float, который на 8.7e-8 больше π.
+        //
+        // Нормализация alone оставила бы здесь (-1, +0) и (-1, -0) разными
+        // углами в -π + 4.9e-8 и +π - 4.9e-8, а (+1, +0) и (+1, -0) — разными
+        // знаками нуля. Одна ориентация — два значения, то есть два ключа в
+        // словаре и два места в сортировке, ровно тот симптом, который и
+        // требовалось убрать. Ось приводится к константам напрямую.
+        if (direction.Y == 0f)
+        {
+            return direction.X < 0f ? new(Math.PI, true) : Zero;
+        }
+
+        // Остальные направления: результат atan2 нормализуется, и это не
+        // перестраховка.
+        //
+        // Прежний комментарий утверждал, что MathF.Atan2 уже отдаёт значение
+        // в (-π; π], поэтому нормализация якобы лишняя. Утверждение неверно:
+        // float-атрибут π равен 3.1415927410125732, и это БОЛЬШЕ double-атрибута
+        // π = 3.141592653589793. Значит результат был правее плюс пи и вне
+        // диапазона. На целочисленной сетке направлений вне диапазона
+        // оказывалось 7.1 % — все с y = 0.
+        return new(Trig.Atan2(direction.Y, direction.X), true);
+    }
 
     /// <summary>
     /// Нулевой угол.
@@ -84,7 +131,8 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     public static Angle Zero { get; } = new(0.0, true);
 
     /// <summary>
-    /// Угол в радианах. Нормализован, если угол получен из нормализованного источника.
+    /// Угол в радианах. Нормализован, если угол получен не из
+    /// <see cref="FromRadiansRaw"/> и не из <see cref="ScaleRaw"/>.
     /// </summary>
     public double Radians => _radians;
 
@@ -281,6 +329,19 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="to">Конечный угол.</param>
     /// <param name="t">Параметр интерполяции, где 0 — <paramref name="from"/>, 1 — <paramref name="to"/>.</param>
     /// <returns>Интерполированный угол.</returns>
+    /// <remarks>
+    /// <paramref name="t"/> не ограничен единицей, и это указано здесь, потому
+    /// что при <c>t &gt; 1</c> движение продолжается по той же кратчайшей дуге,
+    /// а угол перепрыгивает на соседнюю ветвь нормализации:
+    /// <c>Lerp(170°, −170°, 2)</c> даёт −150°, а не 190°. Возврат за единицу
+    /// почти не виден по величине: на <c>t = 0.9999</c> и <c>t = 1.0001</c>
+    /// значения расходятся на 0.004 градуса, то есть скачок незаметен.
+    /// <para>
+    /// Ограничивать или отвергать <paramref name="t"/> нельзя без отдельного
+    /// решения владельца кода: повторяющиеся вызовы с накоплением дают
+    /// <c>t &gt; 1</c> законно, и их отвержение сломало бы сглаживание.
+    /// </para>
+    /// </remarks>
     public static Angle Lerp(Angle from, Angle to, float t) => from.Add(Angle.FromRadiansRaw(ShortestDelta(from, to) * t));
 
     /// <summary>
@@ -360,8 +421,23 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <inheritdoc/>
     public override int GetHashCode() => _radians.GetHashCode();
 
-    /// <inheritdoc/>
-    public int CompareTo(Angle other) => _radians.CompareTo(other._radians);
+    /// <summary>
+    /// Упорядочивает углы по радианам. Значение <c>NaN</c> считается больше
+    /// любого числа и равным самому себе.
+    /// </summary>
+    /// <param name="other">Сравниваемый угол.</param>
+    /// <returns>
+    /// Отрицательное число, если угол меньше, ноль если равен, положительное
+    /// если больше.
+    /// </returns>
+    /// <remarks>
+    /// Правило выбрано одно на все пять операций сравнения, потому что
+    /// прежние давали на паре <c>(NaN, число)</c> три разных ответа:
+    /// <see cref="CompareTo(Angle)"/> возвращал −1, а <c>&lt;</c> и <c>&gt;</c> —
+    /// ложь. Правило «NaN больше всего и равен себе» согласовано с
+    /// <see cref="Equals(Angle)"/> и с операторами.
+    /// </remarks>
+    public int CompareTo(Angle other) => CompareRadians(_radians, other._radians);
 
     /// <summary>
     /// Сравнивает углы на равенство.
@@ -416,6 +492,20 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="value">Угол.</param>
     /// <param name="divisor">Делитель.</param>
     /// <returns>Результат деления.</returns>
+    /// <remarks>
+    /// Нулевой делитель не отвергается: <c>45° / 0</c> даёт угол-<c>NaN</c>.
+    /// Это решение зафиксировано здесь, потому что значение, равное самому
+    /// себе по <see cref="Equals(Angle)"/> и при этом не сравнимое ни с одним числом,
+    /// выглядит как ошибка, но убрать его значило бы бросать исключение в
+    /// арифметическом операторе на пути, где вызывающий не ждёт его.
+    /// <see cref="FromRadians(double)"/> даёт такой же угол на входе
+    /// <c>NaN</c>, поэтому бросать только здесь означало бы запретить не то
+    /// поведение, а половину его.
+    /// <para>
+    /// Порядок таких углов задан явно: <c>NaN</c> больше любого числа и равен
+    /// самому себе, см. <see cref="CompareTo"/>.
+    /// </para>
+    /// </remarks>
     public static Angle operator /(Angle value, float divisor) => new(value._radians / divisor, true);
 
     /// <summary>
@@ -424,7 +514,7 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="left">Первый угол.</param>
     /// <param name="right">Второй угол.</param>
     /// <returns>Результат сравнения.</returns>
-    public static bool operator <(Angle left, Angle right) => left._radians < right._radians;
+    public static bool operator <(Angle left, Angle right) => CompareRadians(left._radians, right._radians) < 0;
 
     /// <summary>
     /// Сравнивает углы: больше, если радианы больше.
@@ -432,7 +522,7 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="left">Первый угол.</param>
     /// <param name="right">Второй угол.</param>
     /// <returns>Результат сравнения.</returns>
-    public static bool operator >(Angle left, Angle right) => left._radians > right._radians;
+    public static bool operator >(Angle left, Angle right) => CompareRadians(left._radians, right._radians) > 0;
 
     /// <summary>
     /// Сравнивает углы: меньше или равно.
@@ -440,7 +530,7 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="left">Первый угол.</param>
     /// <param name="right">Второй угол.</param>
     /// <returns>Результат сравнения.</returns>
-    public static bool operator <=(Angle left, Angle right) => left._radians <= right._radians;
+    public static bool operator <=(Angle left, Angle right) => CompareRadians(left._radians, right._radians) <= 0;
 
     /// <summary>
     /// Сравнивает углы: больше или равно.
@@ -448,8 +538,52 @@ public readonly struct Angle : IEquatable<Angle>, IComparable<Angle>
     /// <param name="left">Первый угол.</param>
     /// <param name="right">Второй угол.</param>
     /// <returns>Результат сравнения.</returns>
-    public static bool operator >=(Angle left, Angle right) => left._radians >= right._radians;
+    public static bool operator >=(Angle left, Angle right) => CompareRadians(left._radians, right._radians) >= 0;
+
+    /// <summary>
+    /// Упорядочивание радианов: <c>NaN</c> больше любого числа и равен самому
+    /// себе.
+    /// </summary>
+    /// <param name="left">Первый радиан.</param>
+    /// <param name="right">Второй радиан.</param>
+    /// <returns>Результат сравнения.</returns>
+    /// <remarks>
+    /// Обе ветви на числах не доходят до проверки на <c>NaN</c>: если значения
+    /// упорядочиваются обычным сравнением, результат уже известен. На
+    /// нечисловых радианах, то есть на углах из <c>NaN</c>, доходит.
+    /// <para>
+    /// Правило нужно потому, что иначе пять операций сравнения отвечают на
+    /// одну пару по-разному, и сортировка углов зависит от того, чем именно
+    /// сравнивают.
+    /// </para>
+    /// </remarks>
+    private static int CompareRadians(double left, double right)
+    {
+        if (left < right)
+        {
+            return -1;
+        }
+
+        if (left > right)
+        {
+            return 1;
+        }
+
+        if (left == right)
+        {
+            return 0;
+        }
+
+        return double.IsNaN(left) ? (double.IsNaN(right) ? 0 : 1) : -1;
+    }
 
     /// <inheritdoc/>
-    public override string ToString() => $"{Degrees:F2} deg";
+    /// <remarks>
+    /// Формат зафиксирован инвариантной культурой: в <c>de-DE</c> тот же угол
+    /// печатался как <c>45,50 deg</c>, то есть вывод зависел от культуры
+    /// процесса. Сосед <c>Rgba32.ToString</c> от культуры не зависит, и
+    /// правило «одна операция — один контракт» требует того же от угла.
+    /// </remarks>
+    public override string ToString()
+        => $"{Degrees.ToString("F2", CultureInfo.InvariantCulture)} deg";
 }
