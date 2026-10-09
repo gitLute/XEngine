@@ -868,4 +868,248 @@ public sealed class QueriesWave2Tests
     }
 
     #endregion
+
+    #region P2-44: отрицательный размер прямоугольника
+
+    /// <summary>
+    /// Дискриминирующий вход из отчёта волны 1: два пересекающихся
+    /// прямоугольника, у второго размер отрицателен по обеим осям. Геометрически
+    /// они пересекаются, а метод отвечал <c>hit = false</c> и заглушкой
+    /// <c>depth = 0</c>, то есть «раздвигать нечего» на фигурах, которые
+    /// раздвигать есть.
+    /// <para>
+    /// Эталон — геометрия, а не код: фиксируется, что прямые
+    /// <c>Aabb2.FromCenterAndSize</c> и <c>Aabb2</c> на том же размере
+    /// отвергают вход, и метод обязан вести себя так же. Иначе два соседних
+    /// типа дают разные ответы на одни и те же числа.
+    /// </para>
+    /// <para>
+    /// Бросается <see cref="ArgumentOutOfRangeException"/>, а не базовый
+    /// <see cref="ArgumentException"/>: значение вне диапазона, и такой тип
+    /// точнее. Он выводится из <see cref="ArgumentException"/>, поэтому
+    /// вызывающий, ловящий базовый тип, ничего не теряет.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TryGetObbPenetration_NegativeSizeIsRejectedLikeAabb2()
+    {
+        Vector2 center = new(0.5f, 0f);
+
+        // Соседний тип на том же размере отвергает вход.
+        Assert.Throws<ArgumentException>(
+            () => Aabb2.FromCenterAndSize(Vector2.Zero, new Vector2(-1f, -1f)));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => Collision.TryGetObbPenetration(
+            Vector2.Zero,
+            new Vector2(2f, 2f),
+            Angle.Zero,
+            center,
+            new Vector2(-1f, -1f),
+            Angle.Zero,
+            out _,
+            out _));
+    }
+
+    /// <summary>
+    /// Отрицателен только размер по одной оси, и только у второго
+    /// прямоугольника: проверка обязана ловить все четыре комбинации, а не
+    /// только «обе оси отрицательны».
+    /// </summary>
+    [Fact]
+    public void TryGetObbPenetration_NegativeSizeOnAnyAxisOfEitherBoxIsRejected()
+    {
+        Vector2[] badSizes =
+        [
+            new(-1f, 2f),
+            new(2f, -1f),
+            new(-2f, -1f),
+        ];
+
+        int rejected = 0;
+        int total = 0;
+
+        foreach (Vector2 size in badSizes)
+        {
+            foreach (bool firstIsBad in new[] { true, false })
+            {
+                total++;
+                Vector2 sizeA = firstIsBad ? size : new Vector2(2f, 2f);
+                Vector2 sizeB = firstIsBad ? new Vector2(2f, 2f) : size;
+
+                Assert.Throws<ArgumentOutOfRangeException>(() => Collision.TryGetObbPenetration(
+                    Vector2.Zero,
+                    sizeA,
+                    Angle.Zero,
+                    new Vector2(0.5f, 0f),
+                    sizeB,
+                    Angle.Zero,
+                    out _,
+                    out _));
+
+                rejected++;
+            }
+        }
+
+        Assert.Equal(6, rejected);
+        Assert.Equal(6, total);
+    }
+
+    /// <summary>
+    /// Граница правки: нулевой размер остаётся разрешённым. Вырожденный в точку
+    /// прямоугольник не имеет наименьшей проникающей оси, и метод обязан
+    /// честно сообщить об отказе, а не бросать. Проверка падает, если сторож
+    /// поставлен как «размер не положителен».
+    /// </summary>
+    [Fact]
+    public void TryGetObbPenetration_ZeroSizeIsStillAllowed()
+    {
+        Assert.False(Collision.TryGetObbPenetration(
+            Vector2.Zero,
+            Vector2.Zero,
+            default,
+            Vector2.One,
+            Vector2.One,
+            default,
+            out Vector2 axis,
+            out float depth));
+
+        Assert.Equal(0f, depth);
+
+        // Нулевой размер по одной оси при ненулевом по другой — тоже законный
+        // вырожденный случай. Проникновения нет: отрезку нечего раздвигать, и
+        // строгая граница метода отвечает на это ложью, как и на касание.
+        // Ошибка была бы в обратном: вернуть true с нулевой глубиной.
+        Assert.False(Collision.TryGetObbPenetration(
+            Vector2.Zero,
+            new Vector2(0f, 4f),
+            Angle.Zero,
+            Vector2.Zero,
+            new Vector2(0f, 4f),
+            Angle.Zero,
+            out _,
+            out float degenerateDepth));
+        Assert.Equal(0f, degenerateDepth);
+
+        // А вот ненулевой размер той же формы пересекается по-настоящему:
+        // проверка не должна сломать и этот случай.
+        Assert.True(Collision.TryGetObbPenetration(
+            Vector2.Zero,
+            new Vector2(2f, 4f),
+            Angle.Zero,
+            Vector2.Zero,
+            new Vector2(2f, 4f),
+            Angle.Zero,
+            out _,
+            out float realDepth));
+        Assert.True(realDepth > 0f, "Совпадающие прямоугольники ненулевого размера обязаны иметь проникновение.");
+
+        _ = axis;
+    }
+
+    /// <summary>
+    /// Нечисловой размер обязан быть назван, а не молча превращён в
+    /// бессмысленный вердикт: <c>NaN</c> не проходит ни одно сравнение, и
+    /// метод отвечал бы «нечего раздвигать».
+    /// </summary>
+    [Fact]
+    public void TryGetObbPenetration_NonFiniteSizeIsRejected()
+    {
+        Vector2[] badSizes =
+        [
+            new(float.NaN, 2f),
+            new(2f, float.NaN),
+            new(float.PositiveInfinity, 2f),
+            new(2f, float.NegativeInfinity),
+        ];
+
+        int rejected = 0;
+        foreach (Vector2 size in badSizes)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => Collision.TryGetObbPenetration(
+                Vector2.Zero,
+                size,
+                Angle.Zero,
+                Vector2.Zero,
+                new Vector2(2f, 2f),
+                Angle.Zero,
+                out _,
+                out _));
+
+            rejected++;
+        }
+
+        Assert.Equal(4, rejected);
+    }
+
+    /// <summary>
+    /// Путь <c>Rect → OBB</c> не должен давать неверный ответ без
+    /// предупреждения.
+    /// <para>
+    /// <see cref="Rect"/> отрицательный размер допускает и нормализует сам:
+    /// <c>Rect(0, 0, −2, −2)</c> это прямоугольник X[−2; 0] Y[−2; 0], вполне
+    /// законный и непустой. Но <c>Position + Size</c> даёт для него
+    /// перевёрнутые углы, а <see cref="Aabb2.FromRect"/> такой размер принимает
+    /// и нормализует углы. То есть по дороге <c>Rect → OBB</c> размер может
+    /// остаться отрицательным, и метод обязан быть тем местом, где это
+    /// обнаруживается, а не молча выдать неверный вердикт.
+    /// </para>
+    /// <para>
+    /// Проверка фиксирует и решение: правильный способ перевести зеркальный
+    /// прямоугольник — взять нормализованный размер из
+    /// <see cref="Aabb2.FromRect"/>, и тогда метод работает.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void TryGetObbPenetration_RectWithNegativeSizeCannotSlipThroughAabb()
+    {
+        Rect rect = Rect.FromCenter(Vector2.Zero, new Vector2(-2f, -2f));
+        Assert.False(rect.IsEmpty, "Прямоугольник с отрицательным размером нормализует углы и не пуст.");
+
+        // Aabb2.FromRect такой прямоугольник принимает и возвращает правильные
+        // упорядоченные границы.
+        Aabb2 box = Aabb2.FromRect(rect);
+        Assert.False(box.IsEmpty);
+        Assert.True(box.Min.X < 0f && box.Max.X > 0f, "Границы должны быть упорядочены.");
+
+        // Исходный размер при этом остался отрицательным, и на нём метод
+        // обязан отказать, а не выдать неверный вердикт.
+        Assert.Throws<ArgumentOutOfRangeException>(() => Collision.TryGetObbPenetration(
+            rect.Position + (rect.Size * 0.5f),
+            rect.Size,
+            Angle.Zero,
+            Vector2.One,
+            new Vector2(2f, 2f),
+            Angle.Zero,
+            out _,
+            out _));
+
+        // Нормализованный размер из того же прямоугольника работает, и вердикт
+        // совпадает с вердиктом по его границам.
+        Vector2 normalized = box.Max - box.Min;
+        Assert.True(normalized.X > 0f && normalized.Y > 0f);
+
+        bool byNormalized = Collision.TryGetObbPenetration(
+            rect.Position + (rect.Size * 0.5f),
+            normalized,
+            Angle.Zero,
+            Vector2.One,
+            new Vector2(2f, 2f),
+            Angle.Zero,
+            out _,
+            out _);
+
+        bool byAabb = Collision.TryGetObbPenetration(
+            box.Center,
+            box.Size,
+            Angle.Zero,
+            Vector2.One,
+            new Vector2(2f, 2f),
+            Angle.Zero,
+            out _,
+            out _);
+
+        Assert.Equal(byAabb, byNormalized);
+    }
+
+    #endregion
 }
