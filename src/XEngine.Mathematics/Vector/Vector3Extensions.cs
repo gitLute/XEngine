@@ -15,6 +15,30 @@ namespace XEngine.Mathematics;
 public static class Vector3Extensions
 {
     /// <summary>
+    /// Нижняя граница квадрата длины, до которой сумма квадратов считается
+    /// в нормальных числах float.
+    /// </summary>
+    /// <remarks>
+    /// Выбрана с запасом относительно точки обнуления
+    /// <c>sqrt(float.Epsilon)</c> = 3.743392e-23, то есть квадрата 1.4e-45:
+    /// при квадрате 1e-30 квадраты отдельных компонент лежат на 1e-31 и выше,
+    /// то есть ещё нормальные, и сумма не теряет разряды. Соответствующая
+    /// длина — 1e-15.
+    /// </remarks>
+    private const float MinNormalizableLengthSquared = 1e-30f;
+
+    /// <summary>
+    /// Верхняя граница квадрата длины, до которой сумма квадратов не
+    /// переполняется.
+    /// </summary>
+    /// <remarks>
+    /// <c>float.MaxValue</c> равен 3.4028235e38, поэтому квадрат 3e38 ещё
+    /// конечен, а соответствующая длина 1.7320509e19 помещается в float со
+    /// всем числом разрядов. Всё, что длиннее, считается масштабированием.
+    /// </remarks>
+    private const float MaxNormalizableLengthSquared = 3e38f;
+
+    /// <summary>
     /// Возвращает нормализованный вектор. Настоящий нулевой вектор остаётся
     /// нулевым.
     /// </summary>
@@ -23,12 +47,48 @@ public static class Vector3Extensions
     /// <remarks>
     /// Проверяется именно ноль, а не длина меньше Scalar.Epsilon. Ненулевой
     /// вектор — направление, и он нормализуется при любой длине: иначе
-    /// отрезок длиной меньше микрона превращался в нулевой, и вызывающий получал
-    /// не направление, а его отсутствие. Обнуление коротких векторов нужно там,
-    /// где сравнивают с допуском, и там сравнивают явно.
+    /// отрезок длиной меньше микрона превращался в нулевой, и вызывающий
+    /// получал не направление, а его отсутствие. Обнуление коротких векторов
+    /// нужно там, где сравнивают с допуском, и там сравнивают явно.
+    /// <para>
+    /// Длина считается как <c>sqrt(сумма квадратов)</c>, а во float квадрат
+    /// обнуляется при длине меньше 3.743392e-23 и переполняется при длине
+    /// больше 1.8446744e19. На таких векторах деление на длину давало
+    /// <c>(Infinity, NaN, NaN)</c> внизу и нулевой вектор вверху, то есть
+    /// «нулевой» и «огромный» становились неразличимы. Поэтому за пределами
+    /// надёжного диапазона вектор сначала делится наибольшей по модулю
+    /// компонентой: наибольшая компонента становится единицей, сумма квадратов
+    /// лежит в [1; 3], и длина вычислима при любой длине. Направление при
+    /// этом не меняется, потому что деление на положительную величину оставляет
+    /// его тем же.
+    /// </para>
+    /// <para>
+    /// Нечисловой вход остаётся нечисловым и обрабатывается прежним путём, то
+    /// есть результат тот же, что и до правки: бесконечность и <c>NaN</c>
+    /// отсекаются проверкой масштаба.
+    /// </para>
     /// </remarks>
     public static Vector3 SafeNormalize(this Vector3 vector)
-        => vector == Vector3.Zero ? Vector3.Zero : Vector3.Normalize(vector);
+    {
+        float lengthSquared = vector.LengthSquared();
+        if (lengthSquared >= MinNormalizableLengthSquared && lengthSquared <= MaxNormalizableLengthSquared)
+        {
+            return vector / MathF.Sqrt(lengthSquared);
+        }
+
+        float scale = MathF.Max(MathF.Abs(vector.X), MathF.Max(MathF.Abs(vector.Y), MathF.Abs(vector.Z)));
+        if (scale == 0f)
+        {
+            return Vector3.Zero;
+        }
+
+        if (!float.IsFinite(scale))
+        {
+            return Vector3.Normalize(vector);
+        }
+
+        return Vector3.Normalize(vector / scale);
+    }
 
     /// <summary>
     /// Ограничивает длину вектора сверху.
@@ -46,7 +106,33 @@ public static class Vector3Extensions
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxLength);
 
-        return vector.LengthSquared() <= maxLength * maxLength ? vector : Vector3.Normalize(vector) * maxLength;
+        // Обычный случай: и квадрат длины, и квадрат предела представимы во
+        // float, то есть сравнение квадратов равносильно сравнению длин.
+        // Если квадрат предела переполнился, то предел больше 1.8446744e19,
+        // а длина здесь меньше 1.7320509e19, то есть ограничение и не должно
+        // было сработать; если обнулился — предел меньше 1.057e-19, а длина
+        // здесь больше 1e-15, то есть ограничение должно сработать. Оба
+        // случая дают верный ответ, поэтому отдельно их проверять не нужно.
+        float lengthSquared = vector.LengthSquared();
+        if (lengthSquared >= MinNormalizableLengthSquared && lengthSquared <= MaxNormalizableLengthSquared)
+        {
+            return lengthSquared <= maxLength * maxLength ? vector : Vector3.Normalize(vector) * maxLength;
+        }
+
+        // Длина в масштабе наибольшей компоненты: квадрат исходного вектора
+        // обнуляется и переполняется вместе с float, а здесь обе величины
+        // лежат в надёжном диапазоне. Поэтому ограничение не зависит от того,
+        // в каких единицах выбран мир.
+        float scale = MathF.Max(MathF.Abs(vector.X), MathF.Max(MathF.Abs(vector.Y), MathF.Abs(vector.Z)));
+        if (scale == 0f)
+        {
+            return vector;
+        }
+
+        Vector3 scaled = vector / scale;
+        float scaledLengthSquared = scaled.LengthSquared();
+        float ratio = maxLength / scale;
+        return ratio * ratio >= scaledLengthSquared ? vector : scaled * (maxLength / MathF.Sqrt(scaledLengthSquared));
     }
 
     /// <summary>
@@ -58,13 +144,34 @@ public static class Vector3Extensions
     /// <exception cref="ArgumentException">Направление нулевое.</exception>
     public static Vector3 ProjectOntoDirection(this Vector3 vector, Vector3 direction)
     {
+        // Направление проекции — безразмерная величина, и сравнивать его с
+        // Scalar.Epsilon неверно: порог с размерностью длины отбрасывал
+        // настоящие направления, которые задают ту же прямую, что и единичные.
+        // Исключение по подписи метода означает «направление нулевое», и теперь
+        // так и есть.
+        //
+        // Вдобавок формула d·(v·d)/(d·d) переполняется и обнуляется вместе с
+        // квадратом направления, поэтому она считается в масштабе наибольшей
+        // компоненты: там наибольшая компонента равна единице, квадрат лежит в
+        // [1; 3], и результат не зависит от длины направления вовсе.
+        // Обычный случай: квадрат длины направления представим во float, и
+        // формула считается как есть. Случай, когда квадрат превышает
+        // MaxNormalizableLengthSquared, означает длину больше 1.7320509e19, то
+        // есть переполнение квадрата, и формула без масштабирования вернёт ноль.
         float lengthSquared = direction.LengthSquared();
-        if (lengthSquared <= Scalar.Epsilon * Scalar.Epsilon)
+        if (lengthSquared >= MinNormalizableLengthSquared && lengthSquared <= MaxNormalizableLengthSquared)
+        {
+            return direction * (Vector3.Dot(vector, direction) / lengthSquared);
+        }
+
+        float scale = MathF.Max(MathF.Abs(direction.X), MathF.Max(MathF.Abs(direction.Y), MathF.Abs(direction.Z)));
+        if (scale == 0f)
         {
             throw new ArgumentException("Направление проекции должно быть ненулевым.", nameof(direction));
         }
 
-        return direction * (Vector3.Dot(vector, direction) / lengthSquared);
+        Vector3 scaled = direction / scale;
+        return scaled * (Vector3.Dot(vector, scaled) / scaled.LengthSquared());
     }
 
     /// <summary>
@@ -122,7 +229,8 @@ public static class Vector3Extensions
     /// и по той же причине.
     /// <para>
     /// Метод возвращает смещение, а не позицию, поэтому «не двигаться» — это ноль.
-    /// <c>NaN</c> проверку не проходит и уходит в вычисление, то есть даёт <c>NaN</c>.
+    /// <c>NaN</c> проверку не проходит и уходит в вычисление, то есть даёт <c>NaN</c>
+    /// в том числе на совпадающих точках: ошибка вызывающего не должна молчать.
     /// </para>
     /// </remarks>
     public static Vector3 MoveTowards(this Vector3 from, Vector3 to, float maxStep)
@@ -134,9 +242,39 @@ public static class Vector3Extensions
 
         Vector3 delta = to - from;
         float lengthSquared = delta.LengthSquared();
-        return lengthSquared <= maxStep * maxStep || lengthSquared <= Scalar.Epsilon * Scalar.Epsilon
-            ? delta
-            : delta * (maxStep / MathF.Sqrt(lengthSquared));
+
+        // Обычный случай: квадрат расстояния и квадрат шага оба представимы во
+        // float, то есть сравнение квадратов равносильно сравнению длин, а
+        // деление в знаменателе безопас��е. Проверки на оба квадрата вместе с
+        // границами диапазона не требуются: если квадрат шага переполнился,
+        // то шаг больше 1.8446744e19, а длина здесь меньше 1.7320509e19 и
+        // ограничение не должно сработать; если обнулился — шаг меньше
+        // 1.057e-19, а длина здесь больше 1e-15 и ограничение должно
+        // сработать. Оба случая дают верный ответ.
+        if (lengthSquared >= MinNormalizableLengthSquared && lengthSquared <= MaxNormalizableLengthSquared)
+        {
+            return lengthSquared <= maxStep * maxStep
+                ? delta
+                : delta * (maxStep / MathF.Sqrt(lengthSquared));
+        }
+
+        // Длина не представима во float: квадрат обнулился или переполнился.
+        // Ограничение шага тогда считается в масштабе наибольшей компоненты
+        // сдвига, где он лежит в [1; sqrt(3)] и оба квадрата конечны.
+        float scale = MathF.Max(MathF.Abs(delta.X), MathF.Max(MathF.Abs(delta.Y), MathF.Abs(delta.Z)));
+        if (scale == 0f)
+        {
+            // Совпадающие точки: смещения нет, и оно равно нулю. Шаг при этом
+            // может быть и бесконечным (тогда это законное «без ограничения»,
+            // и результат — ноль), и нечисловым (тогда ошибка вызывающего не
+            // должна молчать, как в Angle.MoveTowards). Поэтому сравнение
+            // идёт до умножения: Zero * бесконечность дало бы NaN.
+            return maxStep > 0f ? delta : delta * maxStep;
+        }
+
+        Vector3 scaled = delta / scale;
+        float scaledLength = scaled.Length();
+        return scale * scaledLength <= maxStep ? delta : scaled * (maxStep / scaledLength);
     }
 
     /// <summary>
@@ -166,8 +304,12 @@ public static class Vector3Extensions
         // Азимут не определён у чисто вертикального направления: там
         // горизонтальная составляющая равна нулю, и направление назад не
         // выбирается. Возвращается ноль, как и у Vector2.ToAngle.
-        float horizontal = MathF.Sqrt((direction.X * direction.X) + (direction.Z * direction.Z));
-        if (horizontal == 0f)
+        //
+        // Проверяются сами компоненты, а не их квадраты: квадрат обнуляется
+        // при горизонтали меньше 3.743392e-23, и признак «направление вертикальное»
+        // срабатывал на ненулевой горизонтальной составляющей, то есть метод
+        // терял азимут там, где соседний Vector2.ToAngle его возвращал.
+        if (direction.X == 0f && direction.Z == 0f)
         {
             return Angle.Zero;
         }

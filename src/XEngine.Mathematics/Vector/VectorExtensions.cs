@@ -9,6 +9,30 @@ namespace XEngine.Mathematics;
 public static class VectorExtensions
 {
     /// <summary>
+    /// Нижняя граница квадрата длины, до которой сумма квадратов считается
+    /// в нормальных числах float.
+    /// </summary>
+    /// <remarks>
+    /// Выбрана с запасом относительно точки обнуления
+    /// <c>sqrt(float.Epsilon)</c> = 3.743392e-23, то есть квадрата 1.4e-45:
+    /// при квадрате 1e-30 квадраты отдельных компонент лежат на 1e-31 и выше,
+    /// то есть ещё нормальные, и сумма не теряет разряды. Соответствующая
+    /// длина — 1e-15.
+    /// </remarks>
+    private const float MinNormalizableLengthSquared = 1e-30f;
+
+    /// <summary>
+    /// Верхняя граница квадрата длины, до которой сумма квадратов не
+    /// переполняется.
+    /// </summary>
+    /// <remarks>
+    /// <c>float.MaxValue</c> равен 3.4028235e38, поэтому квадрат 3e38 ещё
+    /// конечен, а соответствующая длина 1.7320509e19 помещается в float со
+    /// всем числом разрядов. Всё, что длиннее, считается масштабированием.
+    /// </remarks>
+    private const float MaxNormalizableLengthSquared = 3e38f;
+
+    /// <summary>
     /// Возвращает вектор заданной длины под заданным углом.
     /// </summary>
     /// <param name="length">Длина вектора.</param>
@@ -70,10 +94,31 @@ public static class VectorExtensions
     /// <returns>Вектор единичной длины либо нулевой.</returns>
     /// <remarks>
     /// Проверяется именно ноль, а не длина меньше Scalar.Epsilon: см.
-    /// <see cref="Vector3Extensions.SafeNormalize"/>.
+    /// <see cref="Vector3Extensions.SafeNormalize"/>. Там же разобрано, почему
+    /// длину нельзя считать как <c>sqrt(сумма квадратов)</c> без оговорок и
+    /// чем это грозит на обоих концах диапазона float.
     /// </remarks>
     public static Vector2 SafeNormalize(this Vector2 vector)
-        => vector == Vector2.Zero ? Vector2.Zero : Vector2.Normalize(vector);
+    {
+        float lengthSquared = vector.LengthSquared();
+        if (lengthSquared >= MinNormalizableLengthSquared && lengthSquared <= MaxNormalizableLengthSquared)
+        {
+            return vector / MathF.Sqrt(lengthSquared);
+        }
+
+        float scale = MathF.Max(MathF.Abs(vector.X), MathF.Abs(vector.Y));
+        if (scale == 0f)
+        {
+            return Vector2.Zero;
+        }
+
+        if (!float.IsFinite(scale))
+        {
+            return Vector2.Normalize(vector);
+        }
+
+        return Vector2.Normalize(vector / scale);
+    }
 
     /// <summary>
     /// Ограничивает длину вектора сверху.
@@ -93,7 +138,33 @@ public static class VectorExtensions
     {
         ArgumentOutOfRangeException.ThrowIfNegative(maxLength);
 
-        return vector.LengthSquared() <= maxLength * maxLength ? vector : Vector2.Normalize(vector) * maxLength;
+        // Обычный случай: и квадрат длины, и квадрат предела представимы во
+        // float, то есть сравнение квадратов равносильно сравнению длин.
+        // Если квадрат предела переполнился, то предел больше 1.8446744e19,
+        // а длина здесь меньше 1.7320509e19, то есть ограничение и не должно
+        // было сработать; если обнулился — предел меньше 1.057e-19, а длина
+        // здесь больше 1e-15, то есть ограничение должно сработать. Оба
+        // случая дают верный ответ, поэтому отдельно их проверять не нужно.
+        float lengthSquared = vector.LengthSquared();
+        if (lengthSquared >= MinNormalizableLengthSquared && lengthSquared <= MaxNormalizableLengthSquared)
+        {
+            return lengthSquared <= maxLength * maxLength ? vector : Vector2.Normalize(vector) * maxLength;
+        }
+
+        // Длина в масштабе наибольшей компоненты: квадрат исходного вектора
+        // обнуляется и переполняется вместе с float, а здесь обе величины
+        // лежат в надёжном диапазоне. Поэтому ограничение не зависит от того,
+        // в каких единицах выбран мир.
+        float scale = MathF.Max(MathF.Abs(vector.X), MathF.Abs(vector.Y));
+        if (scale == 0f)
+        {
+            return vector;
+        }
+
+        Vector2 scaled = vector / scale;
+        float scaledLengthSquared = scaled.LengthSquared();
+        float ratio = maxLength / scale;
+        return ratio * ratio >= scaledLengthSquared ? vector : scaled * (maxLength / MathF.Sqrt(scaledLengthSquared));
     }
 
     /// <summary>
@@ -105,13 +176,34 @@ public static class VectorExtensions
     /// <exception cref="ArgumentException">Направление нулевое.</exception>
     public static Vector2 Project(this Vector2 vector, Vector2 direction)
     {
+        // Направление проекции — безразмерная величина, и сравнивать его с
+        // Scalar.Epsilon неверно: порог с размерностью длины отбрасывал
+        // настоящие направления, которые задают ту же прямую, что и единичные.
+        // Исключение по подписи метода означает «направление нулевое», и теперь
+        // так и есть.
+        //
+        // Вдобавок формула d·(v·d)/(d·d) переполняется и обнуляется вместе с
+        // квадратом направления, поэтому она считается в масштабе наибольшей
+        // компоненты: там наибольшая компонента равна единице, квадрат лежит в
+        // [1; 2], и результат не зависит от длины направления вовсе.
+        // Обычный случай: квадрат длины направления представим во float, и
+        // формула считается как есть. Случай, когда квадрат превышает
+        // MaxNormalizableLengthSquared, означает длину больше 1.7320509e19, то
+        // есть переполнение квадрата, и формула без масштабирования вернёт ноль.
         float lengthSquared = direction.LengthSquared();
-        if (lengthSquared <= Scalar.Epsilon * Scalar.Epsilon)
+        if (lengthSquared >= MinNormalizableLengthSquared && lengthSquared <= MaxNormalizableLengthSquared)
+        {
+            return direction * (Vector2.Dot(vector, direction) / lengthSquared);
+        }
+
+        float scale = MathF.Max(MathF.Abs(direction.X), MathF.Abs(direction.Y));
+        if (scale == 0f)
         {
             throw new ArgumentException("Направление проекции должно быть ненулевым.", nameof(direction));
         }
 
-        return direction * (Vector2.Dot(vector, direction) / lengthSquared);
+        Vector2 scaled = direction / scale;
+        return scaled * (Vector2.Dot(vector, scaled) / scaled.LengthSquared());
     }
 
     /// <summary>
@@ -130,7 +222,8 @@ public static class VectorExtensions
     /// <see cref="Angle.MoveTowards"/>, и по той же причине.
     /// <para>
     /// Метод возвращает смещение, а не позицию, поэтому «не двигаться» — это ноль.
-    /// <c>NaN</c> проверку не проходит и уходит в вычисление, то есть даёт <c>NaN</c>.
+    /// <c>NaN</c> проверку не проходит и уходит в вычисление, то есть даёт <c>NaN</c>
+    /// в том числе на совпадающих точках: ошибка вызывающего не должна молчать.
     /// </para>
     /// </remarks>
     public static Vector2 MoveTowards(this Vector2 from, Vector2 to, float maxStep)
@@ -142,9 +235,39 @@ public static class VectorExtensions
 
         Vector2 delta = to - from;
         float lengthSquared = delta.LengthSquared();
-        return lengthSquared <= maxStep * maxStep || lengthSquared <= Scalar.Epsilon * Scalar.Epsilon
-            ? delta
-            : delta * (maxStep / MathF.Sqrt(lengthSquared));
+
+        // Обычный случай: квадрат расстояния и квадрат шага оба представимы во
+        // float, то есть сравнение квадратов равносильно сравнению длин, а
+        // деление в знаменателе безопас��е. Проверки на оба квадрата вместе с
+        // границами диапазона не требуются: если квадрат шага переполнился,
+        // то шаг больше 1.8446744e19, а длина здесь меньше 1.7320509e19 и
+        // ограничение не должно сработать; если обнулился — шаг меньше
+        // 1.057e-19, а длина здесь больше 1e-15 и ограничение должно
+        // сработать. Оба случая дают верный ответ.
+        if (lengthSquared >= MinNormalizableLengthSquared && lengthSquared <= MaxNormalizableLengthSquared)
+        {
+            return lengthSquared <= maxStep * maxStep
+                ? delta
+                : delta * (maxStep / MathF.Sqrt(lengthSquared));
+        }
+
+        // Длина не представима во float: квадрат обнулился или переполнился.
+        // Ограничение шага тогда считается в масштабе наибольшей компоненты
+        // сдвига, где он лежит в [1; sqrt(2)] и оба квадрата конечны.
+        float scale = MathF.Max(MathF.Abs(delta.X), MathF.Abs(delta.Y));
+        if (scale == 0f)
+        {
+            // Совпадающие точки: смещения нет, и оно равно нулю. Шаг при этом
+            // может быть и бесконечным (тогда это законное «без ограничения»,
+            // и результат — ноль), и нечисловым (тогда ошибка вызывающего не
+            // должна молчать, как в Angle.MoveTowards). Поэтому сравнение
+            // идёт до умножения: Zero * бесконечность дало бы NaN.
+            return maxStep > 0f ? delta : delta * maxStep;
+        }
+
+        Vector2 scaled = delta / scale;
+        float scaledLength = scaled.Length();
+        return scale * scaledLength <= maxStep ? delta : scaled * (maxStep / scaledLength);
     }
 
     /// <summary>
