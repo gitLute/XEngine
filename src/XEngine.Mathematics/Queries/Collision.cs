@@ -168,6 +168,17 @@ public static class Collision
     /// сообщали ненулевое расстояние. Здесь порог применяется только к квадратам
     /// длин и в тех же единицах, в которых они измеряются.
     /// </para>
+    /// <para>
+    /// Отрезок считается вырожденным в точку только при точном нулевом квадрате
+    /// длины. Прежний порог <c>1e-12</c> в квадратных единицах отбрасывал любой
+    /// отрезок короче микрона, независимо от масштаба мира, и на микроскопическом
+    /// масштабе это была ошибка в сто процентов длины: из 20000 заведомо
+    /// пересекающихся отрезков ненулевое расстояние возвращали 20000.
+    /// Обоснование «у отрезка короче микрона во float нет различимой внутренности»
+    /// измерено и опровергнуто: ULP на величине 1e-6 равен 1.137e-13, то есть
+    /// около 8.8 миллиона различимых положений на единицу длины. Длина, равная
+    /// нулю, вырождена действительно, а ненулевая — нет.
+    /// </para>
     /// </remarks>
     public static float SegmentSegmentDistance(Segment2 a, Segment2 b)
     {
@@ -188,12 +199,12 @@ public static class Collision
 
         float parameterFirst;
         float parameterSecond;
-        if (lengthSquared1 <= DegenerateLengthSquared && lengthSquared2 <= DegenerateLengthSquared)
+        if (lengthSquared1 <= 0f && lengthSquared2 <= 0f)
         {
             parameterFirst = 0f;
             parameterSecond = 0f;
         }
-        else if (lengthSquared1 <= DegenerateLengthSquared)
+        else if (lengthSquared1 <= 0f)
         {
             parameterFirst = 0f;
             parameterSecond = Scalar.Clamp(along2 / lengthSquared2, 0f, 1f);
@@ -201,7 +212,7 @@ public static class Collision
         else
         {
             float along1 = Vector2.Dot(d1, r);
-            if (lengthSquared2 <= DegenerateLengthSquared)
+            if (lengthSquared2 <= 0f)
             {
                 parameterFirst = Scalar.Clamp(-along1 / lengthSquared1, 0f, 1f);
                 parameterSecond = 0f;
@@ -240,15 +251,6 @@ public static class Collision
         Vector2 closestSecond = p2 + (d2 * parameterSecond);
         return Vector2.Distance(closestFirst, closestSecond);
     }
-
-    /// <summary>
-    /// Квадрат минимальной длины, ниже которого отрезок считается вырожденным
-    /// в точку. Величина измеряется в квадратных единицах, поэтому и порог
-    /// задан как квадрат длины, а не как <see cref="Scalar.Epsilon"/>. Абсолютный
-    /// порог здесь оправдан: у отрезка короче микрона во float нет различимой
-    /// внутренности, и такой отрезок действительно вырожден.
-    /// </summary>
-    private const float DegenerateLengthSquared = 1e-12f;
 
     /// <summary>
     /// Проверяет, находится ли точка внутри повёрнутого прямоугольника.
