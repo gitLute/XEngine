@@ -718,7 +718,11 @@ public sealed class VectorWave2Tests
         (float sin, float cos) = MathF.SinCos(angle);
         Vector3 hint = ((unit * cos) + (axis * sin));
 
-        foreach (float magnitude in new[] { 1e-6f, 1f, 1e6f })
+        // Верхние длины обязаны работать так же, как единичная: прежний код
+        // сравнивал |candidate|² с Epsilon²·|hint|², и при |hint| больше
+        // 1.8446744e19 правая часть переполнялась, то есть запасная ось бралась
+        // всегда и подсказка не учитывалась вовсе.
+        foreach (float magnitude in new[] { 1e-25f, 1e-6f, 1f, 1e6f, 1e25f })
         {
             Vector3 result = vector.Perpendicular(hint * magnitude);
             float followed = Vector3.Dot(VectorWave2Reference.Unit(hint.X * magnitude, hint.Y * magnitude, hint.Z * magnitude), result);
@@ -727,6 +731,68 @@ public sealed class VectorWave2Tests
                 followed >= sin - 1e-4,
                 $"Подсказка под углом {angle} рад длиной {magnitude:E2} не учтена: dot = {followed:F6} при ожидаемом {sin:F6}.");
         }
+    }
+
+    /// <summary>
+    /// П3-3, обратная сторона: ниже порога подсказка обязана не учитываться, то
+    /// есть берётся запасная ось. Проверяется сравнением с той же осью, что и
+    /// в методе, потому что сравнение по углу не различает случаи: при почти
+    /// параллельной подсказке запасная ось иногда совпадает с правильным
+    /// ответом, и мера этого не видит.
+    /// </summary>
+    [Theory]
+    [InlineData(1e-9f)]
+    [InlineData(5e-7f)]
+    [InlineData(9e-7f)]
+    public void Perpendicular_IgnoresHintBelowDocumentedThreshold(float angle)
+    {
+        Vector3 vector = new(0.2672612f, -0.5345225f, 0.8017837f);
+        Vector3 unit = VectorWave2Reference.Unit(vector.X, vector.Y, vector.Z);
+        Vector3 axis = VectorWave2Reference.Unit(
+            unit.Y * Vector3.UnitZ.Z - unit.Z * Vector3.UnitZ.Y,
+            unit.Z * Vector3.UnitZ.X - unit.X * Vector3.UnitZ.Z,
+            unit.X * Vector3.UnitZ.Y - unit.Y * Vector3.UnitZ.X);
+        (float sin, float cos) = MathF.SinCos(angle);
+        Vector3 hint = ((unit * cos) + (axis * sin));
+        Vector3 fallback = VectorWave2Reference.FallbackAxis(unit);
+
+        foreach (float magnitude in new[] { 1e-25f, 1f, 1e25f })
+        {
+            Vector3 result = vector.Perpendicular(hint * magnitude);
+
+            Assert.True(
+                Chord(result, fallback) < 1e-3f,
+                $"Подсказка под углом {angle:E1} рад (sin = {sin:E1} меньше Scalar.Epsilon) длиной {magnitude:E2} была учтена вместо запасной оси.");
+        }
+    }
+
+    /// <summary>
+    /// П3-3, прямая сторона: граница обязана совпасть с той, что написана в
+    /// доктрине, то есть <c>sin угла = Scalar.Epsilon</c>. Чуть выше порога
+    /// подсказка учитывается, чуть ниже — нет. Это и есть проверка того, что
+    /// доктрина перестала врать о собственной границе.
+    /// </summary>
+    [Theory]
+    [InlineData(1.05e-6f, true)]
+    [InlineData(9e-7f, false)]
+    public void Perpendicular_ThresholdIsExactlyScalarEpsilon(float angle, bool expectFollowed)
+    {
+        Vector3 vector = new(0.2672612f, -0.5345225f, 0.8017837f);
+        Vector3 unit = VectorWave2Reference.Unit(vector.X, vector.Y, vector.Z);
+        Vector3 axis = VectorWave2Reference.Unit(
+            unit.Y * Vector3.UnitZ.Z - unit.Z * Vector3.UnitZ.Y,
+            unit.Z * Vector3.UnitZ.X - unit.X * Vector3.UnitZ.Z,
+            unit.X * Vector3.UnitZ.Y - unit.Y * Vector3.UnitZ.X);
+        (float sin, float cos) = MathF.SinCos(angle);
+        Vector3 hint = ((unit * cos) + (axis * sin));
+        Vector3 fallback = VectorWave2Reference.FallbackAxis(unit);
+
+        Vector3 result = vector.Perpendicular(hint);
+        bool followed = Chord(result, fallback) >= 1e-3f;
+
+        Assert.True(
+            followed == expectFollowed,
+            $"Угол {angle:E1} рад: подсказка {(followed ? "учтена" : "проигнорирована")}, ожидалось наоборот.");
     }
 
     // ==================================================================
@@ -787,6 +853,15 @@ public sealed class VectorWave2Tests
     }
 
     // ==================================================================
+
+    /// <summary>
+    /// Хорда между двумя единичными векторами: расстояние по сфере.
+    /// </summary>
+    private static float Chord(Vector3 a, Vector3 b)
+        => (float)Math.Sqrt(
+            ((double)a.X - b.X) * (a.X - b.X)
+            + ((double)a.Y - b.Y) * (a.Y - b.Y)
+            + ((double)a.Z - b.Z) * (a.Z - b.Z));
 
     private static void AssertFinite(Vector3 value)
     {
@@ -890,6 +965,22 @@ internal static class VectorWave2Reference
         => Assert.True(
             Math.Abs(Length(value) - 1.0) <= 1e-6,
             $"{context}: длина {Length(value):F9} вместо единицы, вектор {value}.");
+
+    /// <summary>
+    /// Запасная ось из того же метода: без сравнения с ней нельзя отличить
+    /// «подсказка проигнорирована» от «подсказка учтена», потому что при
+    /// некоторых направлениях запасная ось совпадает с правильным ответом.
+    /// </summary>
+    public static Vector3 FallbackAxis(Vector3 unit)
+    {
+        float absoluteX = MathF.Abs(unit.X);
+        float absoluteY = MathF.Abs(unit.Y);
+        float absoluteZ = MathF.Abs(unit.Z);
+        Vector3 baseAxis = absoluteX <= absoluteY && absoluteX <= absoluteZ
+            ? Vector3.UnitX
+            : absoluteY <= absoluteZ ? Vector3.UnitY : Vector3.UnitZ;
+        return Vector3.Normalize(Vector3.Cross(baseAxis, unit));
+    }
 
     private static long Ordered(float value)
     {
