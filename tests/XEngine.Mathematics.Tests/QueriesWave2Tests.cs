@@ -1112,4 +1112,121 @@ public sealed class QueriesWave2Tests
     }
 
     #endregion
+
+    #region P3: контракты, зафиксированные измерением
+
+    /// <summary>
+    /// P3-1: при отказе ось проникновения равна заглушке. Измерено на 200 000
+    /// промахах волны 1: заглушка возвращалась всегда, а не иногда. Проверка
+    /// фиксирует текущее поведение, чтобы смена контракта на «ось только при
+    /// true» стала осознанным изменением, а не случайным.
+    /// </summary>
+    [Fact]
+    public void TryGetObbPenetration_OnHitAxisIsUnitAndDepthIsPositive()
+    {
+        Random random = new(24680);
+        int hits = 0;
+        int misses = 0;
+        int badOnHit = 0;
+
+        for (int index = 0; index < 20000; index++)
+        {
+            // Центры берутся близко друг к другу, иначе почти все пары оказываются
+            // непересекающимися и выборка перестаёт проверять ось проникновения.
+            Vector2 centerA = new(random.NextSingle() * 40f - 20f, random.NextSingle() * 40f - 20f);
+            Vector2 centerB = centerA + new Vector2(random.NextSingle() * 2f, random.NextSingle() * 2f);
+            Vector2 size = new(random.NextSingle() * 3f + 0.5f, random.NextSingle() * 3f + 0.5f);
+
+            bool hit = Collision.TryGetObbPenetration(
+                centerA, size, Angle.FromDegrees(random.NextSingle() * 360f),
+                centerB, size, Angle.FromDegrees(random.NextSingle() * 360f),
+                out Vector2 axis,
+                out float depth);
+
+            if (hit)
+            {
+                hits++;
+                if (!(depth > 0f) || MathF.Abs(axis.Length() - 1f) > 1e-4f)
+                {
+                    badOnHit++;
+                }
+            }
+            else
+            {
+                misses++;
+            }
+        }
+
+        Assert.Equal(0, badOnHit);
+        Assert.True(hits > 1000, $"Выборка не дискриминирующая: попаданий всего {hits} из 20000.");
+        Assert.True(misses > 1000, $"Выборка не дискриминирующая: промахов всего {misses} из 20000.");
+    }
+
+    /// <summary>
+    /// P3-6: допуск <see cref="Collision.Distance"/> абсолютный и по умолчанию
+    /// равен микроетру. Проверка фиксирует обе стороны контракта: значение по
+    /// умолчанию слипает на масштабе меньше микрона, и вызывающий может
+    /// передать свой допуск.
+    /// </summary>
+    [Fact]
+    public void Distance_EpsilonIsAbsoluteAndOverridable()
+    {
+        // Мир масштаба 1e-6: расстояние в половину микрона считается нулём.
+        Vector2 origin = Vector2.Zero;
+        Vector2 close = new(5e-7f, 0f);
+
+        Assert.Equal(0f, Collision.Distance(origin, close));
+        Assert.Equal(0f, Collision.Distance(origin, close, Scalar.Epsilon));
+
+        // Тот же вход с меньшим допуском даёт настоящее расстояние.
+        Assert.True(Collision.Distance(origin, close, 1e-9f) > 0f,
+            "Вызывающий в других единицах обязан иметь возможность передать свой допуск.");
+
+        // На обычном масштабе микрон ничего не слипает.
+        Assert.True(Collision.Distance(Vector2.Zero, new Vector2(0.5f, 0f)) > 0f);
+
+        // Расстояние больше допуска возвращается без изменения.
+        Assert.Equal(2f, Collision.Distance(Vector2.Zero, new Vector2(2f, 0f), 1e-3f));
+    }
+
+    /// <summary>
+    /// P3-4: абсолютный допуск 1e-3 м не отсекает объём, который снаружи
+    /// пирамиды на сколь угодно малый сдвиг. Это не «дефект, который надо
+    /// чинить», а документированное ограничение метода, и проверка его
+    /// фиксирует: подмена на относительный допуск изменила бы вердикт и
+    /// сломала бы объекты у края кадра.
+    /// </summary>
+    [Fact]
+    public void ContainmentTolerance_KeepsObjectsThatBarelyCrossThePlane()
+    {
+        Frustum frustum = CreateCameraFrustum(1f, 1000f);
+
+        // Соглашение знака проверено прямым вызовом, а не взятo из догадки:
+        // нормали плоскостей фрустума направлены внутрь, поэтому
+        // DistanceTo положителен ВНУТРИ и отрицателен снаружи. На точке на оси
+        // взгляда все шесть величин положительны.
+        Vector3 inside = Vector3.UnitZ * 500f;
+        Assert.True(frustum.Intersects(new BoundingSphere(inside, 0f)));
+
+        // Берётся плоскость, для которой точка на оси точно внутри, и точка
+        // сдвигается вдоль её нормали наружу на заданное расстояние.
+        Plane3 plane = frustum.Planes[4];
+        float depth = plane.DistanceTo(inside);
+        Assert.True(depth > 0f, "Точка на оси взгляда обязана быть внутри нижней плоскости.");
+
+        // Выход наружу на 5e-4 м: меньше допуска, объект остаётся видимым.
+        Vector3 barely = inside - (plane.Normal * (depth + 5e-4f));
+        Assert.True(frustum.Intersects(new BoundingSphere(barely, 0f)),
+            "Точка, вышедшая за плоскость меньше чем на допуск, обязана остаться видимой.");
+        Assert.True(frustum.Contains(new BoundingSphere(barely, 0f)),
+            "Contains обязан вести себя так же: допуск расширяет область целиком внутри.");
+
+        // Тот же выход в двадцать раз больше допуска — объект отсекается.
+        Vector3 far = inside - (plane.Normal * (depth + 2.1e-2f));
+        Assert.False(frustum.Intersects(new BoundingSphere(far, 0f)),
+            "Точка, вышедшая за плоскость дальше допуска, обязана отсекаться.");
+        Assert.False(frustum.Contains(new BoundingSphere(far, 0f)));
+    }
+
+    #endregion
 }
