@@ -244,4 +244,148 @@ public sealed class QueriesWave2Tests
     }
 
     #endregion
+
+    #region P2-42: пустой параллелепипед
+
+    /// <summary>
+    /// <c>Aabb3.Empty</c> не содержит ни одной точки, поэтому пересекаться с
+    /// пирамидой он не может. До правки он считался видимым: полуразмер равен
+    /// <c>(−∞,−∞,−∞)</c>, проекция полуразмера на нормаль даёт <c>NaN</c> там,
+    /// где компонента нормали нулевая, сравнение <c>NaN &lt; −1e-3</c> ложно, и
+    /// ни одна из шести плоскостей не отсекает.
+    /// <para>
+    /// Эталон здесь — перегрузка для сферы: та же пустая величина, поданная как
+    /// <see cref="BoundingSphere.FromAabb"/>, отсекается верно, потому что не
+    /// проходит через <c>ProjectedRadius</c>. Два ответа на одном входе обязаны
+    /// совпадать.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Intersects_EmptyBoxIsNotVisible()
+    {
+        Frustum frustum = CreateCameraFrustum();
+
+        Assert.True(Aabb3.Empty.IsEmpty);
+
+        Assert.False(frustum.Intersects(Aabb3.Empty),
+            "Пустой параллелепипед не пересекается с пирамидой: в нём нет ни одной точки.");
+        Assert.False(frustum.Intersects(BoundingSphere.FromAabb(Aabb3.Empty)),
+            "Та же пустая величина как сфера обязана давать тот же ответ.");
+    }
+
+    /// <summary>
+    /// <see cref="Frustum.Contains(in Aabb3)"/> на пустом параллелепипеде обязан
+    /// отвечать так же, как <see cref="Aabb3.Contains(in Aabb3)"/>: пустой объём
+    /// не содержится ни в чём, включая себя.
+    /// </summary>
+    [Fact]
+    public void Contains_EmptyBoxIsNotContained()
+    {
+        Frustum frustum = CreateCameraFrustum();
+
+        Assert.False(frustum.Contains(Aabb3.Empty));
+        Assert.False(frustum.Contains(BoundingSphere.FromAabb(Aabb3.Empty)));
+
+        Aabb3 ordinary = Aabb3.FromCenterAndHalfSize(new Vector3(0f, 0f, 50f), Vector3.One);
+        Assert.False(Aabb3.Empty.Contains(ordinary));
+        Assert.False(ordinary.Contains(Aabb3.Empty));
+    }
+
+    /// <summary>
+    /// Граница правки: неограниченный параллелепипед пересекает пирамиду по
+    /// существу, и отсекать его нельзя. Он не пуст, поэтому сторож правки его
+    /// не касается — проверка падает, если сторож поставлен шире, чем нужно.
+    /// <para>
+    /// Сюда же — параллелепипед с нечисловой границей: по доктрине
+    /// <see cref="IsSphereVisible"/> испорченные данные оставляют объект
+    /// видимым, и <see cref="Frustum.Intersects(in Aabb3)"/> обязан вести себя
+    /// так же, а не молча отсекать.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Intersects_UnboundedAndBrokenBoxesAreNotCulled()
+    {
+        Frustum frustum = CreateCameraFrustum();
+
+        Aabb3 unbounded = new(new Vector3(float.NegativeInfinity), new Vector3(float.PositiveInfinity));
+        Assert.False(unbounded.IsEmpty);
+        Assert.True(frustum.Intersects(unbounded), "Неограниченный параллелепипед пересекает всё.");
+
+        Aabb3 broken = new(new Vector3(float.NaN, -10f, 40f), new Vector3(10f, 10f, 60f));
+        Assert.False(broken.IsEmpty);
+        Assert.True(frustum.Intersects(broken), "Параллелепипед с испорченной границей остаётся видимым.");
+    }
+
+    /// <summary>
+    /// Пустой параллелепипед недостижим через <c>new Aabb3(min, max)</c>:
+    /// конструктор отвергает перевёрнутые границы. Проверяется, что правка
+    /// опирается на признак <see cref="Aabb3.IsEmpty"/>, а не на сравнение с
+    /// <see cref="Aabb3.Empty"/>, то есть останется верной, если пустое
+    /// значение появится другим путём (например, из
+    /// <see cref="Aabb3.Transform"/> на вырожденной матрице).
+    /// </summary>
+    [Fact]
+    public void Intersects_OnlyEmptyBoxIsCulledAmongBoxesOfSameShape()
+    {
+        Frustum frustum = CreateCameraFrustum();
+
+        // Тот же объём по габаритам, что и пустой, но с настоящими границами:
+        // обязан остаться видимым.
+        Aabb3 whole = new(new Vector3(-1000f, -1000f, -1000f), new Vector3(1000f, 1000f, 1000f));
+        Assert.False(whole.IsEmpty);
+        Assert.True(frustum.Intersects(whole));
+    }
+
+    /// <summary>
+    /// Правка не должна ловить лишнего: любой непустой параллелепипед,
+    /// пересекающийся с пирамидой, обязан пересекаться и со своей описанной
+    /// сферой, потому что сфера содержит параллелепипед. Это независимое
+    /// свойство (монотонность по вложению), и оно падает, если сторож
+    /// начнёт отсекать годные объёмы.
+    /// </summary>
+    [Fact]
+    public void Intersects_BoxAnswerNeverContradictsCircumscribedSphere()
+    {
+        Frustum frustum = CreateCameraFrustum();
+
+        Random random = new(20240517);
+        int visible = 0;
+        for (int index = 0; index < 20000; index++)
+        {
+            Vector3 center = new(
+                (random.NextSingle() * 2f - 1f) * 400f,
+                (random.NextSingle() * 2f - 1f) * 400f,
+                random.NextSingle() * 1200f - 200f);
+            Vector3 half = new(
+                random.NextSingle() * 30f + 0.01f,
+                random.NextSingle() * 30f + 0.01f,
+                random.NextSingle() * 30f + 0.01f);
+
+            Aabb3 box = Aabb3.FromCenterAndHalfSize(center, half);
+            Assert.False(box.IsEmpty);
+
+            if (frustum.Intersects(box))
+            {
+                visible++;
+                Assert.True(frustum.Intersects(new BoundingSphere(center, half.Length())),
+                    "Параллелепипед пересекается, значит его описанная сфера обязана пересекаться.");
+            }
+        }
+
+        Assert.True(visible > 1000, $"Проверка не дискриминирующая: из 20000 боксов видимых всего {visible}.");
+    }
+
+    /// <summary>
+    /// Обычная камера, на которой отсечение обязано работать: ближняя плоскость
+    /// в 1 м, дальняя в 1000 м, взгляд вдоль +Z из начала координат.
+    /// </summary>
+    private static Frustum CreateCameraFrustum()
+    {
+        Matrix4x4 projection = Matrix4x4Extensions.CreatePerspective(Angle.FromDegrees(60f), 1.6f, 1f, 1000f);
+        Matrix4x4 view = Matrix4x4Extensions.CreateLookAt(Vector3.Zero, new Vector3(0f, 0f, 1f), Vector3.UnitY);
+
+        return Frustum.FromViewProjection(Matrix4x4Extensions.CreateViewProjection(view, projection));
+    }
+
+    #endregion
 }
