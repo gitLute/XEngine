@@ -2192,23 +2192,53 @@ public class DefectRegressionTests
     }
 
     /// <summary>
-    /// P2-3: следствие для публичного API. <c>Angle.FromDirection</c> намеренно
-    /// не нормализует результат, потому что нормализация здесь не нужна, поэтому
-    /// различие знаков нуля доходит до вызывающего: два направления вдоль одной
-    /// оси обязаны давать разные углы с разными хешами, и <c>−v</c> обязан давать
-    /// <c>−π</c>, а не <c>+π</c>.
+    /// P1-4. <c>Angle.FromDirection</c> нормализует результат, поэтому знаковый
+    /// ноль в <c>y</c> НЕ ДОЛЖЕН разводить углы: одна ориентация обязана давать
+    /// одно значение с одним хешем.
+    /// <para>
+    /// Прежняя редакция этого теста утверждала обратное — разные значения, разные
+    /// хеши и <c>−π</c> для направления влево. То есть она закрепляла сам дефект
+    /// P1-4: на целочисленной сетке вне диапазона <c>(−π; π]</c> оказывалось
+    /// 7.1 % направлений, словарь давал две записи на одну ориентацию, а знаковый
+    /// ноль нарушал инвариант с двух сторон. Тест переписан по решению владельца
+    /// кода вместе с закрытием P1-4.
+    /// </para>
     /// </summary>
     [Fact]
-    public void Angle_SignedZeroAlongTheSameAxisGivesDifferentValues()
+    public void Angle_SignedZeroAlongTheSameAxisGivesSameValue()
     {
-        Angle positive = Angle.FromDirection(new Vector2(-1f, 0f));
-        Angle negative = Angle.FromDirection(new Vector2(-1f, -0f));
+        Angle leftPositiveZero = Angle.FromDirection(new Vector2(-1f, 0f));
+        Angle leftNegativeZero = Angle.FromDirection(new Vector2(-1f, -0f));
 
-        Assert.NotEqual(positive, negative);
-        Assert.NotEqual(positive.GetHashCode(), negative.GetHashCode());
-        MathAssert.NearlyEqual(-Math.PI, negative.Radians, 1e-6);
-        MathAssert.NearlyEqual(Math.PI, positive.Radians, 1e-6);
-        Assert.Equal(-180f, negative.Degrees, 4);
+        // Одна ориентация — одно значение. Это и есть наблюдаемое следствие
+        // дефекта: раньше словарь и сортировка видели два разных угла.
+        Assert.Equal(leftPositiveZero, leftNegativeZero);
+        Assert.Equal(leftPositiveZero.GetHashCode(), leftNegativeZero.GetHashCode());
+
+        var byOrientation = new Dictionary<Angle, int>
+        {
+            [leftPositiveZero] = 1,
+            [leftNegativeZero] = 2,
+        };
+        Assert.Single(byOrientation);
+
+        // Диапазон (−π; π]: минус пи приведён к плюс пи, знак не просочился ни
+        // с одной стороны, ни с другой.
+        MathAssert.NearlyEqual(Math.PI, leftPositiveZero.Radians, 1e-6);
+        MathAssert.NearlyEqual(Math.PI, leftNegativeZero.Radians, 1e-6);
+        Assert.Equal(180f, leftPositiveZero.Degrees, 4);
+        Assert.Equal(180f, leftNegativeZero.Degrees, 4);
+
+        // Та же ось вправо: знаковый ноль здесь тоже не разводит и не тянет
+        // знак нуля наружу.
+        Angle rightPositiveZero = Angle.FromDirection(new Vector2(1f, 0f));
+        Angle rightNegativeZero = Angle.FromDirection(new Vector2(1f, -0f));
+
+        Assert.Equal(rightPositiveZero, rightNegativeZero);
+        Assert.Equal(0f, rightPositiveZero.Radians, 6);
+        Assert.Equal(0f, rightNegativeZero.Radians, 6);
+        Assert.Equal(0f, rightPositiveZero.Degrees, 4);
+        Assert.Equal(0f, rightNegativeZero.Degrees, 4);
     }
 
     /// <summary>

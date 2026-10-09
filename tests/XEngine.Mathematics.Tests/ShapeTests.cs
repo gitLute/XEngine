@@ -66,11 +66,29 @@ public sealed class ShapeTests
     }
 
     [Fact]
-    public void Rect_IsEmpty_ForZeroAndNegativeSize()
+    public void Rect_IsEmpty_IsDecidedByAreaNotBySize()
     {
-        Assert.True(new Rect(0f, 0f, 0f, 5f).IsEmpty);
-        Assert.True(new Rect(0f, 0f, 5f, -1f).IsEmpty);
+        // P1-2. Пустота определяется по ОБЛАСТИ, а не по размеру. Прямоугольник
+        // с отрицательным размером задаёт настоящую область: Left и Right
+        // нормализуют порядок, поэтому у Rect(0, 0, 5, -1) область X[0;5]
+        // Y[-1;0] — площадь 5, и он не пуст.
+        //
+        // Прежняя редакция этого теста утверждала обратное
+        // (Assert.True(new Rect(0f, 0f, 5f, -1f).IsEmpty)), то есть
+        // закрепляла сам дефект P1-2. Тест переписан по решению владельца
+        // кода вместе с закрытием P1-2.
+        Assert.True(new Rect(0f, 0f, 0f, 5f).IsEmpty);    // нулевая ширина: области нет
+        Assert.False(new Rect(0f, 0f, 5f, -1f).IsEmpty);   // область площадью 5
+        Assert.False(new Rect(0f, 0f, -5f, 1f).IsEmpty);   // зеркальный случай
         Assert.False(new Rect(0f, 0f, 1f, 1f).IsEmpty);
+
+        // Дискринирующий вход P1-2: при прежнем определении внутренний
+        // прямоугольник считался пустым и Contains ложно отказывал, хотя
+        // область X[4;8] Y[4;8] целиком внутри.
+        Rect outer = new(0f, 0f, 10f, 10f);
+        Rect inner = new(8f, 8f, -4f, -4f);
+
+        Assert.True(outer.Contains(inner));
     }
 
     [Fact]
