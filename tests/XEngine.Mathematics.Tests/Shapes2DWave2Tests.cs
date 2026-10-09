@@ -1199,6 +1199,123 @@ public sealed class Shapes2DWave2Tests
     }
 
     // ==================================================================
+    // P3-3. Intersects и Intersection отвечают на разные вопросы
+    // ==================================================================
+
+    /// <summary>
+    /// Дискриминирующий вход P3-3: два прямоугольника касаются ребром, и
+    /// <see cref="Rect.Intersects"/> отвечает <c>true</c>. Прежний
+    /// <see cref="Rect.Intersection"/> возвращал на этом <see cref="Rect.Zero"/>,
+    /// то есть точку в начале координат, которая не принадлежит ни одному из
+    /// прямоугольников: общая часть лежала вне их обоих.
+    /// </summary>
+    [Fact]
+    public void Rect_IntersectionOnEdgeTouchIsTheCommonPart()
+    {
+        Rect left = new(0f, 0f, 4f, 4f);
+        Rect right = new(4f, 0f, 4f, 4f);
+
+        Rect common = left.Intersection(right);
+
+        Assert.True(left.Intersects(right), "Касание ребром считается пересечением.");
+        Assert.NotEqual(Rect.Zero, common);
+        Assert.Equal(4f, common.Left, 6);
+        Assert.Equal(0f, common.Top, 6);
+        Assert.Equal(4f, common.Right, 6);
+        Assert.Equal(4f, common.Bottom, 6);
+        Assert.Equal(0f, common.Width, 6);
+        Assert.Equal(4f, common.Height, 6);
+        Assert.True(common.IsEmpty, "Общая часть нулевой площади распознаётся по IsEmpty.");
+    }
+
+    /// <summary>
+    /// Касание углом даёт общую точку, и она обязана быть именно ею.
+    /// </summary>
+    [Fact]
+    public void Rect_IntersectionOnCornerTouchIsTheTouchingPoint()
+    {
+        Rect left = new(0f, 0f, 4f, 4f);
+        Rect right = new(4f, 4f, 4f, 4f);
+
+        Rect common = left.Intersection(right);
+
+        Assert.True(left.Intersects(right));
+        Assert.Equal(4f, common.Left, 6);
+        Assert.Equal(4f, common.Top, 6);
+        Assert.Equal(0f, common.Width, 6);
+        Assert.Equal(0f, common.Height, 6);
+    }
+
+    /// <summary>
+    /// Настоящее отсутствие общих точек обязано по-прежнему давать
+    /// <see cref="Rect.Zero"/>: правка различает касание и отсутствие
+    /// пересечения, а не отменяет второе.
+    /// </summary>
+    [Fact]
+    public void Rect_IntersectionOfDisjointRectanglesIsStillZero()
+    {
+        Rect left = new(0f, 0f, 4f, 4f);
+
+        Assert.Equal(Rect.Zero, left.Intersection(new Rect(10f, 0f, 4f, 4f)));
+        Assert.Equal(Rect.Zero, left.Intersection(new Rect(4.5f, 0f, 4f, 4f)));
+        Assert.Equal(Rect.Zero, left.Intersection(Rect.Zero));
+        Assert.False(left.Intersects(new Rect(10f, 0f, 4f, 4f)));
+    }
+
+    /// <summary>
+    /// Согласованность пары методов: если <see cref="Rect.Intersects"/> ответил
+    /// <c>true</c>, общая часть обязана лежать в обоих прямоугольниках. Сравнение
+    /// идёт по границам, а не через <see cref="Rect.Contains(Rect)"/>, потому что
+    /// вырожденная общая часть пуста по <see cref="Rect.IsEmpty"/>, и проверка
+    /// принадлежности отвечает на это «нет» намеренно.
+    /// </summary>
+    [Fact]
+    public void Rect_IntersectionLiesInsideBothWhenIntersectsIsTrue()
+    {
+        Rect[] rectangles =
+        [
+            new(0f, 0f, 10f, 10f),
+            new(10f, 0f, 10f, 10f),
+            new(5f, 5f, 10f, 10f),
+            new(-3f, -3f, 6f, 6f),
+            new(2f, 2f, 0f, 5f),
+            new(0f, 8f, 10f, -4f),
+        ];
+
+        int violations = 0;
+        int intersectingPairs = 0;
+
+        foreach (Rect first in rectangles)
+        {
+            foreach (Rect second in rectangles)
+            {
+                if (!first.Intersects(second))
+                {
+                    continue;
+                }
+
+                intersectingPairs++;
+                Rect common = first.Intersection(second);
+                (double fl, double ft, double fr, double fb) = Area(first);
+                (double sl, double st, double sr, double sb) = Area(second);
+                (double cl, double ct, double cr, double cb) = Area(common);
+                double tolerance = 1e-3;
+
+                if (cl < fl - tolerance || cr > fr + tolerance
+                    || ct < ft - tolerance || cb > fb + tolerance
+                    || cl < sl - tolerance || cr > sr + tolerance
+                    || ct < st - tolerance || cb > sb + tolerance)
+                {
+                    violations++;
+                }
+            }
+        }
+
+        Assert.True(intersectingPairs >= 15, $"Набор должен быть массовым: пересекающихся пар {intersectingPairs}.");
+        Assert.Equal(0, violations);
+    }
+
+    // ==================================================================
     // P3-2. Пустое значение Rect ведёт себя иначе соседних типов
     // ==================================================================
 
