@@ -469,22 +469,31 @@ public class ScalarWave2Tests
     }
 
     /// <summary>
-    /// P3-3. Многочлен <c>OneMinusExp</c> не хуже точного значения по числу
-    /// точек, где ошибка превышает последний разряд.
+    /// P3-3. Многочлен <c>OneMinusExp</c> не хуже прежнего по числу точек,
+    /// где ошибка превышает последний разряд.
     /// </summary>
     /// <remarks>
-    /// Проверка по счёту, а не по отдельной точке: прежний вариант без слитной
-    /// операции проигрывал на 66 894 случаях из двух миллионов и выигрывал на
-    /// 53 715. Один пример ничего не различает, счёт — различает.
+    /// Порог подобран между двумя измеренными числами на одних и тех же двух
+    /// миллионах точек: прежняя свёртка без слитной операции даёт 28 518 таких
+    /// точек из 1 999 999, а с ней — 24 451, то есть 1.43 % против 1.22 %.
+    /// Порог 1.32 %. Набор точек задан генератором в этом файле, поэтому
+    /// числа воспроизводимы, и порог не «плавает» между машинами.
+    /// <para>
+    /// Выигрыш скромный, и это сказано прямо: перевод на слитную операцию
+    /// сделан ради согласованности с остальным файлом, где свёртка везде идёт
+    /// через <c>MathF.FusedMultiplyAdd</c>, а не ради крупного прироста точности.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void OneMinusExp_PolynomialIsNoWorseThanLastBit()
+    public void OneMinusExp_PolynomialIsNoWorseThanBefore()
     {
+        const int Total = 2_000_000;
         ulong state = 0x5DEECE66DUL;
         int beyondOneUlp = 0;
+        int taken = 0;
         double worst = 0;
 
-        for (int i = 0; i < 400_000; i++)
+        for (int i = 0; i < Total; i++)
         {
             int bits = NextBits(ref state);
             float x = (bits & 0xFFFFF) / 1048576.0f - 0.5f;
@@ -495,8 +504,9 @@ public class ScalarWave2Tests
 
             float actual = Trig.OneMinusExp(x);
             double reference = 1.0 - Math.Exp((double)x);
+            double ulp = FloatUlp(reference);
             double error = Math.Abs(actual - reference);
-            double ulp = Math.Max(FloatUlp(reference), 1e-45);
+            taken++;
 
             if (error > ulp)
             {
@@ -506,10 +516,13 @@ public class ScalarWave2Tests
             worst = Math.Max(worst, error / ulp);
         }
 
-        _o.WriteLine($"точек вне одного последнего разряда: {beyondOneUlp}, худшее отношение {worst:F1}");
+        _o.WriteLine(
+            $"точек {taken}, вне одного последнего разряда {beyondOneUlp} " +
+            $"({100.0 * beyondOneUlp / taken:F3} %), худшее отношение {worst:F1}");
+
         Assert.True(
-            beyondOneUlp < 400_000 / 50,
-            $"вне одного разряда {beyondOneUlp} точек: свёртка хуже прежней");
+            beyondOneUlp < taken * 132 / 10000,
+            $"вне одного разряда {beyondOneUlp} из {taken}: свёртка не лучше прежней");
     }
 
     /// <summary>
