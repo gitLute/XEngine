@@ -44,6 +44,47 @@ internal static class DeterministicMath
     /// <summary>Натуральный логарифм двойки в двойной точности.</summary>
     private const double LnTwoDouble = 0.69314718055994530942;
 
+    /// <summary>2/π в двойной точности: обратная величина π/2.</summary>
+    private const double InversePiOverTwo = 6.36619772367581382433e-01;
+
+    /// <summary>
+    /// π/2, первые 25 значащих бит. Младшие 28 бит мантиссы нулевые, и на
+    /// этом держится приём Cody-Waite.
+    /// </summary>
+    private const double HalfPiHigh = 1.57079631090164184570e+00;
+
+    /// <summary>Хвост π/2: <c>π/2 − <see cref="HalfPiHigh"/></c>.</summary>
+    private const double HalfPiTail = 1.58932547735281966916e-08;
+
+    /// <summary>Четверть оборота: граница, за которой многочлен уже неверен.</summary>
+    private const double QuarterPi = 0.78539816339744830962;
+
+    /// <summary>
+    /// Граница ветви с Cody-Waite: <c>|x| &lt; 0x4DC90FDB</c>.
+    /// </summary>
+    /// <remarks>
+    /// Взято из musl <c>__rem_pio2f</c> и означает то же самое, что там:
+    /// произведение <c>n·(π/2)</c> для <c>|n| ≤ 8.3·10⁸</c> ещё раскладывается
+    /// на два разбитых слагаемых, а выше нужен разбор 2/π по битам.
+    /// </remarks>
+    private const uint MediumReductionLimit = 0x4DC90FDB;
+
+    /// <summary>
+    /// 2/π, разбитая на куски по 24 бита после двоичной точки, как в musl
+    /// <c>ipio2</c>.
+    /// </summary>
+    /// <remarks>
+    /// Нужно девять кусков: у float мантисса 24 бита, порядок аргумента до
+    /// 104, и чтобы дробная часть произведения <c>x·2/π</c> была известна до
+    /// 2⁻³⁴, требуется 216 бит после точки.
+    /// </remarks>
+    private static ReadOnlySpan<int> InverseTwoPi =>
+    [
+        0xA2F983, 0x6E4E44, 0x1529FC, 0x2757D1, 0xF534DD, 0xC0DB62,
+        0x95993C, 0x439041, 0xFE5163, 0xABDEBB, 0xC561B7, 0x246E3A,
+        0x424DD2, 0xE00649, 0x2EEA09, 0xD1921C,
+    ];
+
     /// <summary>Синус и косинус по одному аргументу.</summary>
     /// <param name="x">Аргумент в радианах.</param>
     /// <param name="sin">Синус.</param>
@@ -62,39 +103,7 @@ internal static class DeterministicMath
             return;
         }
 
-        // Сведение к квадранту в двойной точности: умножение, округление и
-        // вычитание определены точно, а остаток округляется до одинарной
-        // точности ровно один раз.
-        //
-        // Измерено на 200000 точек в каждом диапазоне: остаток ошибается не
-        // более чем на 0.13 последнего разряда до |x| = 2^24 и на 2 разряда
-        // до 2^32. Дальше точность теряется не из-за формулы, а сама по
-        // себе: у числа порядка 2^32 последний разряд двойной точности
-        // сравним с π, то есть все значащие цифры остатка физически не
-        // помещаются в исходном числе. Это неустранимо в одинарной точности,
-        // и честное поведение — вернуть конечное значение, а не бесконечность.
-        double reducedInput = x;
-        double quadrant = Math.Round(reducedInput * 0.63661977236758134308);
-
-        // Номер квадранта ниже приводится к int, чтобы взять два младших бита.
-        // При |x| больше примерно 3.4e9 он не помещается, и приведение double к
-        // int становится неопределённым. Поэтому сначала вычитаются полные
-        // обороты — столько, сколько нужно, а не один раз: одно вычитание
-        // уменьшает порядок всего на 2^52, и при |x| порядка 3.4e38 его
-        // недостаточно. Остаток при этом меняется на величину, кратную 2π,
-        // то есть на синус и косинус не влияет вовсе.
-        //
-        // Круг повторяется не более трёх раз: каждое вычитание уменьшает
-        // порядок на 2^52, а три шага покрывают весь диапазон float.
-        const double QuadrantLimit = 2147483000.0;
-        while (quadrant > QuadrantLimit || quadrant < -QuadrantLimit)
-        {
-            double turns = Math.Round(reducedInput / (Math.PI * 2.0));
-            reducedInput -= turns * (Math.PI * 2.0);
-            quadrant = Math.Round(reducedInput * 0.63661977236758134308);
-        }
-
-        float reduced = (float)(reducedInput - (quadrant * (Math.PI * 0.5)));
+        ReduceToQuadrant(x, out float reduced, out int quadrant);
 
         float squared = reduced * reduced;
 
@@ -116,7 +125,7 @@ internal static class DeterministicMath
 
         // Приведение к квадранту знаками: синус и косинус меняются местами и
         // знаком при сдвиге на четверть оборота.
-        switch (((int)quadrant) & 3)
+        switch (quadrant & 3)
         {
             case 0:
                 sin = sinPoly;
@@ -136,6 +145,241 @@ internal static class DeterministicMath
                 break;
         }
     }
+
+    /// <summary>
+    /// Сводит аргумент к квадранту: возвращает остаток в диапазоне
+    /// <c>[−π/4; π/4]</c> и номер квадранта, для которого остаток нужно
+    /// переставить знаками и местами.
+    /// </summary>
+    /// <param name="x">Аргумент в радианах.</param>
+    /// <param name="reduced">Остаток в диапазоне <c>[−π/4; π/4]</c>.</param>
+    /// <param name="quadrant">
+    /// Номер четверти оборота, отсчитанный так же, как в musl: два младших
+    /// бита определяют перестановку синуса и косинуса.
+    /// </param>
+    /// <remarks>
+    /// Две ветви по природе разные, и граница между ними не подобрана, а
+    /// выведена: пока <c>|x|</c> меньше <see cref="MediumReductionLimit"/>,
+    /// произведение <c>n·(π/2)</c> раскладывается на два слагаемых, и остаток
+    /// считается двумя слитными операциями. Выше этого произведение перестаёт
+    /// помещаться в пару разбитых констант, и сведение идёт разбором 2/π по
+    /// битам.
+    /// <para>
+    /// Прежнее сведение вычитало <c>n·(π/2)</c> одним вычитанием из одного
+    /// полного слагаемого. На больших <c>n</c> округление этого произведения
+    /// съедало все значащие биты остатка: у числа порядка 2⁶⁰ разряд равен
+    /// 128 рад, а остаток лежит в <c>[−π/4; π/4]</c>. На 25.8 % диапазона
+    /// float получалось <c>sin = 0</c> и <c>cos = 1</c>, то есть аргумент
+    /// терялся целиком, хотя платформа на тех же входах держит 3.2e-8.
+    /// </para>
+    /// </remarks>
+    private static void ReduceToQuadrant(float x, out float reduced, out int quadrant)
+    {
+        int bits = BitConverter.SingleToInt32Bits(x);
+        uint magnitude = (uint)bits & 0x7FFFFFFFu;
+
+        if (magnitude < MediumReductionLimit)
+        {
+            // Cody-Waite по образцу musl __rem_pio2f: остаток = x − n·pio2_1 − n·pio2_1t.
+            //
+            // Ближайшее целое берётся не через Math.Round, а вычитанием дробной
+            // части: Math.Round округляет к ближайшему чётному, а нужна одна
+            // операция, которую компилятор не может ни стянуть в слитную, ни
+            // переставить. x·invpio2 лежит в [-8.3·10⁸; 8.3·10⁸], вычитание
+            // целой части точное по Стербенцу, поэтому сравнение точно.
+            double argument = x;
+            double scaled = argument * InversePiOverTwo;
+            double lower = Math.Floor(scaled);
+            double count = lower + ((scaled - lower) >= 0.5 ? 1.0 : 0.0);
+
+            double tail = Math.FusedMultiplyAdd(-count, HalfPiHigh, argument);
+            double value = Math.FusedMultiplyAdd(-count, HalfPiTail, tail);
+
+            // Округление n в ближайшее целое расходится с истинным на единицу,
+            // когда x·2/π стоит ближе чем на 2⁻²³ к полуцелому: произведение
+            // x·invpio2 округлено, и при равных долях выигрывает чётное.
+            // Тогда остаток уходит за π/4, и номер квадранта надо поправить.
+            if (value < -QuarterPi)
+            {
+                count -= 1.0;
+                tail = Math.FusedMultiplyAdd(-count, HalfPiHigh, argument);
+                value = Math.FusedMultiplyAdd(-count, HalfPiTail, tail);
+            }
+            else if (value > QuarterPi)
+            {
+                count += 1.0;
+                tail = Math.FusedMultiplyAdd(-count, HalfPiHigh, argument);
+                value = Math.FusedMultiplyAdd(-count, HalfPiTail, tail);
+            }
+
+            reduced = (float)value;
+            quadrant = (int)count;
+            return;
+        }
+
+        if (magnitude >= 0x7F800000)
+        {
+            // Бесконечность и NaN: по IEEE 754 и C99 F.10.1.4 на нечисловом
+            // входе ответ NaN в обоих значениях, а не конечное число.
+            reduced = float.NaN;
+            quadrant = 0;
+            return;
+        }
+
+        ReduceLarge(bits, out reduced, out quadrant);
+    }
+
+    /// <summary>
+    /// Сведение к квадранту для больших аргументов: разбор 2/π по битам.
+    /// </summary>
+    /// <param name="bits">Биты аргумента беззнаковым целым, мантисса с неявной единицей.</param>
+    /// <param name="reduced">Остаток в диапазоне <c>[−π/4; π/4]</c>.</param>
+    /// <param name="quadrant">Номер четверти оборота.</param>
+    /// <remarks>
+    /// У <c>float</c> всего 24 бита мантиссы, и этого хватает, чтобы обойтись
+    /// без точного умножения произвольной длины: произведение <c>m·2/π</c>
+    /// раскладывается на куски по 24 бита, произведение мантиссы на кусок
+    /// помещается в 64 бита целиком, а дальше суммирование идёт по разрядам с
+    /// переносами.
+    /// <para>
+    /// Переносы между кусками не нужны: куски разнесены по разрядам ровно на
+    /// 24 бита, и каждый занимает свой диапазон, то есть куски не
+    /// перекрываются и складываются без потерь. Поэтому целая часть нужна
+    /// только по модулю 4 (она определяет перестановку синуса и косинуса), а
+    /// дробная нужна с точностью 2⁻³⁴ — её и копим.
+    /// </para>
+    /// </remarks>
+    private static void ReduceLarge(int bits, out float reduced, out int quadrant)
+    {
+        const int Pieces = 9;
+
+        // x = ±m·2^e, где m — 24-битная мантисса float, то есть целое число.
+        uint m = ((uint)bits & 0x7FFFFF) | 0x800000u;
+        int e = ((bits >> 23) & 0xFF) - 150;
+
+        Span<int> digit = stackalloc int[Pieces + 1];
+
+        // Куски m·(2/π) в базе 2⁻²⁴. Старшие 24 бита произведения идут в
+        // текущий разряд, младшие — в следующий: так произведение раскладывается
+        // по двум соседним разрядам с точностью, заданной точностью 2/π.
+        // Множитель приводится к ulong явно и не по недосмотру: произведение
+        // 24-битной мантиссы на 24-битный кусок занимает 48 бит, и в uint
+        // оно переполнилось бы на старших разрядах ровно там, где сведение и
+        // ломается.
+        ulong product = (ulong)m * (uint)InverseTwoPi[0];
+        digit[0] = (int)(product >> 24);
+        int low = (int)(product & 0xFFFFFF);
+
+        // Цикл идёт по кускам 1…Pieces−1, а не по 1…Pieces: последний кусок
+        // целиком уходит в digit[Pieces] строкой ниже, и лишняя итерация
+        // записала бы его дважды — старшие биты в неверный разряд, младшие
+        // поверх них же.
+        for (int j = 1; j < Pieces; j++)
+        {
+            product = (ulong)m * (uint)InverseTwoPi[j];
+            digit[j] = (int)(product >> 24) + low;
+            low = (int)(product & 0xFFFFFF);
+        }
+
+        digit[Pieces] = low;
+
+        // Нормализация: разряд должен уместиться в 24 бита, а лишнее уходит не в
+        // следующий разряд, а в ПРЕДЫДУЩИЙ. Разряд j стоит на степени e − 24j,
+        // то есть чем больше индекс, тем ниже разряд; единица, выпавшая из
+        // разряда j, равна 2^24·2^(e−24j), а разряд j−1 стоит ровно на
+        // e−24(j−1) = e−24j+24. Поэтому перенос идёт по убыванию индекса, и
+        // цикл обязан идти с конца: при обходе по возрастанию разряд j−1 уже
+        // закрыт, и перенос в него потерялся бы молча.
+        for (int j = Pieces; j >= 1; j--)
+        {
+            int carry = digit[j] >> 24;
+            digit[j] &= 0xFFFFFF;
+            digit[j - 1] += carry;
+        }
+
+        digit[0] &= 0xFFFFFF;
+
+        int whole = 0;
+        double part = 0.0;
+
+        for (int j = 0; j <= Pieces; j++)
+        {
+            // Разряд j стоит на степени e − 24j. Разряды сбиваются на 24 бита,
+            // поэтому куски не перекрываются и сумма точна.
+            int power = e - (24 * j);
+            int value = digit[j];
+
+            if (power >= 0)
+            {
+                // Целые разряды от второго и выше кратны 4 и на номер квадранта
+                // не влияют.
+                if (power == 0)
+                {
+                    whole += value;
+                }
+                else if (power == 1)
+                {
+                    whole += (value & 1) << 1;
+                }
+
+                continue;
+            }
+
+            int shift = -power;
+            if (shift >= 24)
+            {
+                // Разряд целиком дробный.
+                part = Math.FusedMultiplyAdd(value, PowerOfTwo(power), part);
+            }
+            else
+            {
+                // Разряд пересекает границу целого: старшие биты — целая часть,
+                // младшие — дробная.
+                whole += value >> shift;
+                part = Math.FusedMultiplyAdd(
+                    value & ((1 << shift) - 1),
+                    PowerOfTwo(power),
+                    part);
+            }
+        }
+
+        // Часть уже лежит в [−1; 1); приводим к [−1/2; 1/2] и получаем
+        // номер квадранта, при котором остаток по модулю не больше π/4.
+        if (part >= 0.5)
+        {
+            whole++;
+            part -= 1.0;
+        }
+        else if (part < -0.5)
+        {
+            whole--;
+            part += 1.0;
+        }
+
+        double angle = part * (Math.PI * 0.5);
+        if (bits < 0)
+        {
+            // Остаток и номер квадранта меняют знак вместе с аргументом.
+            angle = -angle;
+            whole = -whole;
+        }
+
+        reduced = (float)angle;
+        quadrant = whole;
+    }
+
+    /// <summary>
+    /// Степень двойки как двоичное число: <c>2^power</c> точно, без вызова
+    /// платформы.
+    /// </summary>
+    /// <param name="power">Показатель степени.</param>
+    /// <returns>Значение <c>2^power</c>.</returns>
+    /// <remarks>
+    /// Диапазон показателя — от −1022 до 1023, то есть нормальный диапазон.
+    /// В разборе 2/π по битам показатель лежит в пределах от −213 до 104, так
+    /// что границы не достигаются.
+    /// </remarks>
+    private static double PowerOfTwo(int power) => BitConverter.Int64BitsToDouble((long)(1023 + power) << 52);
 
     /// <summary>Синус.</summary>
     /// <param name="x">Аргумент в радианах.</param>
