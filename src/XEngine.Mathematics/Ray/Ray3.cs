@@ -15,18 +15,36 @@ namespace XEngine.Mathematics;
 public readonly struct Ray3 : IEquatable<Ray3>
 {
     /// <summary>
-    /// Создаёт луч. Направление нормализуется автоматически.
+    /// Создаёт луч. Направление нормализуется автоматически и всегда остаётся
+    /// конечным.
     /// </summary>
     /// <param name="origin">Начало луча.</param>
     /// <param name="direction">
-    /// Направление луча. Нулевое направление даёт луч вдоль оси X, чтобы
-    /// вырожденный луч оставался пригодным для арифметики вместо NaN.
+    /// Направление луча. Нулевое и нечисловое направление дают луч вдоль оси X,
+    /// чтобы вырожденный луч оставался пригодным для арифметики вместо NaN.
     /// </param>
     public Ray3(Vector3 origin, Vector3 direction)
     {
         Origin = origin;
+
+        // Нечисловое направление отбрасывается в UnitX, а не пропускается
+        // дальше. SafeNormalize делит на длину, которая для очень малых
+        // величин равна нулю из-за переполнения в обратную сторону, то есть
+        // (1e-30, 0, 0) даёт (бесконечность, NaN, NaN). Проверка на нуль это
+        // не ловит, и луч получал направление не длины 1, а с бесконечностью
+        // внутри, то есть обещание доктрины «направление нормализуется
+        // автоматически» не выполнялось ниже 1e-22.
+        //
+        // Такое направление ломает слэб-метод: MathF.Max и MathF.Min с NaN дают
+        // NaN в .NET, и защитное сравнение min <= max перестаёт срабатывать.
+        // Прежде это выглядело как «Ray3 отвечает false, Ray2 отвечает true»
+        // на одной и той же геометрии, то есть два метода с одним названием
+        // отвечали на один вопрос по-разному. Замкнуто у обоих.
         Vector3 normalized = direction.SafeNormalize();
-        Direction = normalized == Vector3.Zero ? Vector3.UnitX : normalized;
+        Direction = normalized == Vector3.Zero || !float.IsFinite(normalized.X)
+            || !float.IsFinite(normalized.Y) || !float.IsFinite(normalized.Z)
+            ? Vector3.UnitX
+            : normalized;
     }
 
     /// <summary>
@@ -189,8 +207,21 @@ public readonly struct Ray3 : IEquatable<Ray3>
             return false;
         }
 
-        distance = -plane.DistanceTo(Origin) / denominator;
-        return distance >= 0f;
+        float crossing = -plane.DistanceTo(Origin) / denominator;
+        if (crossing < 0f)
+        {
+            // На промахе расстояние обязано быть нулём, как у трёх Raycast.
+            // Прежняя запись отдавала здесь знаковое расстояние, то есть -5000 на
+            // луче, запущенном от плоскости. Вызывающий в цикле по объектам читает
+            // расстояние до проверки признака попадания — это естественный
+            // порядок — и получал правдоподобное отрицательное число вместо
+            // «считать нечего». Два значения одного параметра под одним именем.
+            distance = 0f;
+            return false;
+        }
+
+        distance = crossing;
+        return true;
     }
 
     private bool IntersectsBox(in Aabb3 bounds, out float distance)
@@ -245,23 +276,37 @@ public readonly struct Ray3 : IEquatable<Ray3>
     /// <param name="max">Текущий конец интервала выхода.</param>
     /// <returns><c>false</c>, если после этой оси интервал пуст.</returns>
     /// <remarks>
-    /// Порог сравнивается с длиной, а не с площадью: компонента направления у
+    /// Порога нет, проверяется точный ноль: компонента направления у
     /// нормализованного вектора безразмерна, и сравнение с
-    /// <see cref="Scalar.Epsilon"/> означает «отклонение меньше микрорадиана».
-    /// Нулевая компонента обрабатывается отдельно: луч вдоль этой оси не
-    /// пересекает грани и попадает внутрь, только если лежит между границами.
+    /// <see cref="Scalar.Epsilon"/> объявляло нулевой любую компоненту
+    /// величиной до 1e-6, то есть отклонение луча от оси меньше микрорадиана.
+    /// Внутри такой полосы луч ложно промахивался мимо объёма, который
+    /// пересекал, и ложно срабатывал на объёме, которого не касался.
+    ///
+    /// Порог стоял не у защиты от деления на ноль, а на 32 порядка выше её:
+    /// граница переполнения 1/step — 2.939e-39, то есть
+    /// <c>|step| &lt; 1/float.MaxValue</c>. Проверка точного нуля ловит и эту
+    /// границу, потому что при ненулевой компоненте деление на ноль не
+    /// возникает вовсе.
+    ///
+    /// Деление напрямую, а не умножение на обратное: обратное переполняется при
+    /// <c>|step| &lt; 2.939e-39</c>, и нулевая разность границ даёт
+    /// <c>0 * бесконечность = NaN</c>. Тогда <c>min &lt;= max</c> становится
+    /// ложным и луч объявляется непересекающим объём, в котором он лежит.
+    /// Такое направление достижимо из конструктора: нормализация
+    /// <c>(1e-40, 0, 1)</c> проходит без потерь. Деление <c>0 / 1e-40</c> даёт
+    /// ровно 0, то есть ловушки не возникает.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool Clip(float origin, float step, float lower, float upper, ref float min, ref float max)
     {
-        if (MathF.Abs(step) <= Scalar.Epsilon)
+        if (step == 0f)
         {
             return origin >= lower && origin <= upper;
         }
 
-        float inverse = 1f / step;
-        float first = (lower - origin) * inverse;
-        float second = (upper - origin) * inverse;
+        float first = (lower - origin) / step;
+        float second = (upper - origin) / step;
         if (first > second)
         {
             (first, second) = (second, first);
