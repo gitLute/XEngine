@@ -2494,6 +2494,311 @@ public class DefectRegressionTests
     }
 
     /// <summary>
+    /// P2-6: <c>OneMinusExp</c> обязан считать обе свои ветви через фасад
+    /// <see cref="Trig"/>. Старый код на ветке <c>|x| &gt;= 0.5</c> звал
+    /// <c>MathF.Exp</c> напрямую, то есть обходил детерминированный backend, а
+    /// доктрина метода утверждала обратное.
+    /// </summary>
+    /// <remarks>
+    /// Проверять сверку с платформой бесполезно: в сборке <c>Fast</c>
+    /// <see cref="Trig.Exp"/> и есть <c>MathF.Exp</c>, поэтому сравнение
+    /// проверяет платформу против самой себя и проходит при любом состоянии кода.
+    /// По этой причине содержательная часть проверки живёт только в сборке
+    /// <c>Deterministic</c>, а в быстрой проверяется, что контракт на точной
+    /// величине не нарушен.
+    /// </remarks>
+    [Fact]
+    public void OneMinusExp_UsesTheBackendOnTheDirectFormulaBranch()
+    {
+#if XENGINE_DETERMINISTIC_MATH
+        int differences = 0;
+        int checkedValues = 0;
+
+        for (int i = 0; i < 200000; i++)
+        {
+            float x = (i - 100000) * 0.001f;
+            if (MathF.Abs(x) < 0.5f)
+            {
+                continue;
+            }
+
+            checkedValues++;
+            if (Trig.OneMinusExp(x) != 1f - Trig.Exp(x))
+            {
+                differences++;
+            }
+        }
+
+        Assert.True(checkedValues > 190000, $"Проверено слишком мало значений: {checkedValues}.");
+        Assert.Equal(0, differences);
+#else
+        // В быстрой сборке фасад и есть платформа, поэтому контракт здесь сводится
+        // к тому, что метод совпадает с эталоном на всей прямой ветке.
+        for (int i = 0; i < 20000; i++)
+        {
+            float x = 0.5f + (i * 0.01f);
+            Assert.Equal(1f - MathF.Exp(x), Trig.OneMinusExp(x));
+        }
+#endif
+    }
+
+    /// <summary>
+    /// P2-6 (различающий): в детерминированной сборке метод обязан отличаться от
+    /// платформенного на тех точках, где отличается сам фасад. Без этой проверки
+    /// предыдущая осталась бы зелёной и на старом коде, потому что старый код
+    /// отдавал платформу целиком.
+    /// </summary>
+    [Fact]
+    public void OneMinusExp_DoesNotFallBackToThePlatformBackend()
+    {
+#if XENGINE_DETERMINISTIC_MATH
+        int differing = 0;
+        int observable = 0;
+        int matchedPlatform = 0;
+
+        for (int i = 0; i < 200000; i++)
+        {
+            float x = (i - 100000) * 0.001f;
+            if (MathF.Abs(x) < 0.5f)
+            {
+                continue;
+            }
+
+            float backend = Trig.Exp(x);
+            float platform = MathF.Exp(x);
+            if (backend == platform)
+            {
+                continue;
+            }
+
+            differing++;
+
+            // Расхождение Exp в один последний разряд часто поглощается
+            // вычитанием из единицы: на отрицательных аргументах экспонента
+            // мала, и 1 - 0.0025036633 и 1 - 0.0025036635 после округления
+            // совпадают. На таких точках результат одинаков при любом backend и
+            // различить варианты сборки нечем в принципе — измеренная доля таких
+            // точек 8748 из 17478, то есть почти половина.
+            //
+            // Поэтому считаются только те точки, где разницу видно. Проверка
+            // «каждая различающаяся точка обязана давать различающийся
+            // результат» падала бы на правильном коде.
+            if (1f - backend == 1f - platform)
+            {
+                continue;
+            }
+
+            observable++;
+            if (Trig.OneMinusExp(x) == 1f - platform)
+            {
+                matchedPlatform++;
+            }
+        }
+
+        Assert.True(differing > 10000, $"Фасад почти не расходится с платформой, проверка бессмысленна: {differing}.");
+        Assert.True(observable > 5000, $"Слишком мало наблюдаемых точек: {observable}.");
+
+        // Наблюдаемых точек много, а совпадений с платформой на них нет ни одной:
+        // на прежнем коде здесь было бы 8730, то есть все.
+        Assert.Equal(0, matchedPlatform);
+#else
+        // В быстрой сборке расхождения нет и быть не должно: проверяется признак,
+        // чтобы пустой зелёный прогон не читался как покрытие.
+        Assert.False(Trig.IsDeterministic, "Собран быстрый вариант, обходить backend нечего.");
+#endif
+    }
+
+    /// <summary>
+    /// P2-6 (страховка от переусердствования): многочлен на малом аргументе
+    /// остался на месте и не стал хуже после правки соседней ветки.
+    /// </summary>
+    [Theory]
+    [InlineData(0.0001f)]
+    [InlineData(0.01f)]
+    [InlineData(0.1f)]
+    [InlineData(0.4999f)]
+    public void OneMinusExp_KeepsAccuracyOnThePolynomialBand(float x)
+    {
+        double reference = 1.0 - Math.Exp(x);
+        float expected = (float)reference;
+        float error = MathF.Abs(Trig.OneMinusExp(x) - expected);
+        float relative = MathF.Abs(expected) > 1e-6f ? error / MathF.Abs(expected) : error;
+
+        Assert.True(relative < 1e-5f, $"При x={x} ошибка {relative} велика.");
+    }
+
+    /// <summary>
+    /// P2-7: луч с двумя ненулевыми компонентами направления не пересекает пустой
+    /// AABB. У <see cref="Aabb2.Empty"/> границы переставлены, и слэб-метод на
+    /// такой паре давал непустой интервал параметров, то есть объявлял
+    /// пересечение пустого объёма.
+    /// </summary>
+    /// <remarks>
+    /// Осевой луч старую ошибку не показывал: ветка «компонента равна нулю»
+    /// сравнивала начало луча с переставленными границами и честно отвечала
+    /// <c>false</c>. Поэтому проверка обязана использовать диагональный луч —
+    /// на осевом она была бы зелёной и на дефектном коде.
+    /// </remarks>
+    [Fact]
+    public void Ray2_DoesNotHitEmptyAabb()
+    {
+        (Vector2 Origin, Vector2 Direction)[] rays =
+        [
+            (new Vector2(0f, 0f), new Vector2(1f, 1f)),
+            (new Vector2(5f, 5f), new Vector2(1f, 1f)),
+            (new Vector2(-5f, -5f), new Vector2(1f, 1f)),
+            (new Vector2(-3f, 7f), new Vector2(-2f, 0.5f)),
+        ];
+
+        foreach ((Vector2 origin, Vector2 direction) in rays)
+        {
+            Ray2 ray = new(origin, direction);
+            Assert.False(ray.Intersects(Aabb2.Empty), $"Луч из {origin} по {direction} не должен попадать в пустой AABB.");
+        }
+    }
+
+    /// <summary>
+    /// P2-7 (страховка): настоящий AABB теми же лучами пересекается, то есть
+    /// проверка не превратилась в «никогда ничего не пересекается».
+    /// </summary>
+    [Fact]
+    public void Ray2_StillHitsNonEmptyAabb()
+    {
+        Aabb2 bounds = new(new Vector2(1f, 1f), new Vector2(2f, 2f));
+
+        Assert.True(new Ray2(new Vector2(0f, 0f), new Vector2(1f, 1f)).Intersects(bounds));
+        Assert.False(new Ray2(new Vector2(0f, 5f), new Vector2(1f, 1f)).Intersects(bounds));
+        Assert.False(new Ray2(new Vector2(0f, 0f), new Vector2(1f, 0f)).Intersects(bounds));
+    }
+
+    /// <summary>
+    /// P2-8: отрицательный предел скорости обязан отвергаться исключением,
+    /// называющим виновный параметр. Старый код переставлял границы
+    /// <c>Scalar.Clamp</c> и ронял <see cref="ArgumentException"/> с
+    /// <c>ParamName = min</c>, которого в сигнатуре метода нет.
+    /// </summary>
+    [Fact]
+    public void SmoothDamp_RejectsNegativeMaxSpeedByItsOwnName()
+    {
+        float velocity = 0f;
+
+        ArgumentOutOfRangeException error = Assert.Throws<ArgumentOutOfRangeException>(
+            () => Interpolation.SmoothDamp(0f, 10f, 0.3f, -1f, 0.016f, ref velocity));
+
+        Assert.Equal("maxSpeed", error.ParamName);
+    }
+
+    /// <summary>
+    /// P2-8: неположительное время сглаживания — та же ошибка в знаке у соседнего
+    /// параметра, и раньше она проходила молча, значение подменялось на 1e-4.
+    /// </summary>
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(-5f)]
+    public void SmoothDamp_RejectsNonPositiveSmoothTime(float smoothTime)
+    {
+        float velocity = 0f;
+
+        ArgumentOutOfRangeException error = Assert.Throws<ArgumentOutOfRangeException>(
+            () => Interpolation.SmoothDamp(0f, 10f, smoothTime, 1f, 0.016f, ref velocity));
+
+        Assert.Equal("smoothTime", error.ParamName);
+    }
+
+    /// <summary>
+    /// P2-8 (страховка): корректные параметры по-прежнему сглаживают, нулевой
+    /// предел скорости допустим, а пауза возвращает текущее значение и не
+    /// записывает <c>NaN</c> в скорость.
+    /// </summary>
+    [Fact]
+    public void SmoothDamp_StillWorksOnValidInput()
+    {
+        float velocity = 0f;
+        float value = 0f;
+        for (int i = 0; i < 120; i++)
+        {
+            value = Interpolation.SmoothDamp(value, 10f, 0.3f, 100f, 1f / 60f, ref velocity);
+        }
+
+        Assert.InRange(value, 9f, 10.01f);
+
+        float zeroVelocity = 0f;
+        Assert.Equal(4f, Interpolation.SmoothDamp(4f, 10f, 0.3f, 0f, 1f / 60f, ref zeroVelocity));
+        Assert.Equal(0f, zeroVelocity);
+
+        float pausedVelocity = 1f;
+        Assert.Equal(3f, Interpolation.SmoothDamp(3f, 10f, 0.3f, 100f, 0f, ref pausedVelocity));
+        Assert.Equal(1f, pausedVelocity);
+    }
+
+    /// <summary>
+    /// P2-9: цвет принимает объектную форму с именами каналов, как её уже
+    /// принимали все три векторных конвертера.
+    /// </summary>
+    [Fact]
+    public void JsonConverters_ReadColorFromChannelObject()
+    {
+        JsonSerializerOptions options = new() { Converters = { new Rgba32JsonConverter() } };
+
+        Rgba32 result = JsonSerializer.Deserialize<Rgba32>("{\"r\":0.5,\"g\":0.25,\"b\":1,\"a\":0.5}", options);
+
+        Assert.Equal(0.5f, result.R, 1e-6f);
+        Assert.Equal(0.25f, result.G, 1e-6f);
+        Assert.Equal(1f, result.B, 1e-6f);
+        Assert.Equal(0.5f, result.A, 1e-6f);
+    }
+
+    /// <summary>
+    /// P2-9: одна и та же величина, записанная двумя способами, обязана читаться
+    /// одинаково. Объект из трёх каналов задаёт альфу по умолчанию, как и массив
+    /// из трёх чисел.
+    /// </summary>
+    [Fact]
+    public void JsonConverters_ObjectAndArrayColorFormsAgree()
+    {
+        JsonSerializerOptions options = new() { Converters = { new Rgba32JsonConverter() } };
+
+        Rgba32 fromArray = JsonSerializer.Deserialize<Rgba32>("[0.5,0.25,1]", options);
+        Rgba32 fromObject = JsonSerializer.Deserialize<Rgba32>("{\"r\":0.5,\"g\":0.25,\"b\":1}", options);
+
+        Assert.Equal(fromArray, fromObject);
+        Assert.Equal(1f, fromObject.A, 1e-6f);
+    }
+
+    /// <summary>
+    /// P2-9: нечисловой канал занимает свою позицию и даёт ноль — правило,
+    /// установленное для массивной формы закрытым P3-10, теперь действует и в
+    /// объектной. Поэтому альфа в <c>{"a":null}</c> равна нулю, а не единице.
+    /// </summary>
+    [Fact]
+    public void JsonConverters_NonNumericColorChannelKeepsItsPosition()
+    {
+        JsonSerializerOptions options = new() { Converters = { new Rgba32JsonConverter() } };
+
+        Rgba32 fromObject = JsonSerializer.Deserialize<Rgba32>("{\"r\":1,\"g\":null,\"b\":3,\"a\":null}", options);
+        Rgba32 fromArray = JsonSerializer.Deserialize<Rgba32>("[1,null,3,null]", options);
+
+        Assert.Equal(fromArray, fromObject);
+        Assert.Equal(0f, fromObject.G, 1e-6f);
+        Assert.Equal(0f, fromObject.A, 1e-6f);
+    }
+
+    /// <summary>
+    /// P2-9: имена `x`, `y`, `z` не обязаны означать каналы цвета, а имена
+    /// `r`, `g`, `b`, `a` не обязаны быть осями вектора. Смешанная таблица дала
+    /// бы осмысленный, но неверный результат.
+    /// </summary>
+    [Fact]
+    public void JsonConverters_ColorObjectRejectsVectorAxisNames()
+    {
+        JsonSerializerOptions options = new() { Converters = { new Rgba32JsonConverter() } };
+
+        Rgba32 result = JsonSerializer.Deserialize<Rgba32>("{\"y\":0.5}", options);
+
+        Assert.Equal(new Rgba32(0f, 0f, 0f, 1f), result);
+    }
+
+    /// <summary>
     /// P3: нулевое капсул-тестовое расстояние не должно проходить за равенство:
     /// сам тест-харнесс обязан отвергать NaN.
     /// </summary>

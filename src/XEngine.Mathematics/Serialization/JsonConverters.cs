@@ -124,8 +124,17 @@ public sealed class AngleJsonConverter : JsonConverter<Angle>
 }
 
 /// <summary>
-/// Конвертер <see cref="Rgba32"/> в JSON: строка <c>#RRGGBBAA</c> либо объект с каналами.
+/// Конвертер <see cref="Rgba32"/> в JSON. Принимает три формы записи: строку
+/// <c>#RRGGBBAA</c>, массив каналов <c>[r, g, b, a]</c> и объект с именами
+/// каналов <c>{"r":..,"g":..,"b":..,"a":..}</c>.
 /// </summary>
+/// <remarks>
+/// Объектная форма добавлена вместе с векторными и по тем же правилам: позицию
+/// канала задаёт имя, нечисловое значение даёт ноль, а три канала означают
+/// альфу по умолчанию. Писать цвет объектом умеют редакторы и конвертеры
+/// префабов, и раньше такой ввод отвергался, тогда как `{"x":..,"y":..,"z":..}`
+/// у вектора читался.
+/// </remarks>
 public sealed class Rgba32JsonConverter : JsonConverter<Rgba32>
 {
     /// <inheritdoc/>
@@ -136,12 +145,12 @@ public sealed class Rgba32JsonConverter : JsonConverter<Rgba32>
             return Rgba32.FromHex(reader.GetString() ?? "#000000FF");
         }
 
-        if (reader.TokenType == JsonTokenType.StartArray)
+        if (reader.TokenType == JsonTokenType.StartArray || reader.TokenType == JsonTokenType.StartObject)
         {
             Span<float> values = stackalloc float[4];
-            int count = JsonArrayReaderHelper.ReadFloatArray(ref reader, values);
+            int count = JsonArrayReaderHelper.ReadFloatArray(ref reader, values, ChannelNames.Color);
 
-            // Считать надо реально прочитанные элементы, а не длину буфера:
+            // Считать надо реально прочитанные позиции, а не длину буфера:
             // stackalloc всегда ровно четыре элемента, поэтому проверка
             // values.Length == 4 была всегда истинна, а для массива из трёх
             // чисел непрочитанный слот давал альфу 0 вместо 1, то есть
@@ -150,7 +159,7 @@ public sealed class Rgba32JsonConverter : JsonConverter<Rgba32>
             return new Rgba32(values[0], values[1], values[2], alpha);
         }
 
-        throw new JsonException("Ожидалась строка цвета #RRGGBBAA или массив каналов [r, g, b, a].");
+        throw new JsonException("Ожидалась строка цвета #RRGGBBAA, массив каналов [r, g, b, a] или объект {r, g, b, a}.");
     }
 
     /// <inheritdoc/>

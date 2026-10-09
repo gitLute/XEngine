@@ -157,11 +157,37 @@ public static class Interpolation
     /// </summary>
     /// <param name="current">Текущее значение.</param>
     /// <param name="target">Целевое значение.</param>
-    /// <param name="smoothTime">Время достижения цели, в секундах.</param>
-    /// <param name="maxSpeed">Максимальная скорость изменения.</param>
+    /// <param name="smoothTime">
+    /// Время достижения цели, в секундах. Должно быть больше нуля. Слишком малое
+    /// положительное значение подтягивается к `0.0001`, чтобы знаменатель не
+    /// обнулился: при нуле деление `2 / smoothTime` дало бы бесконечность и от
+    /// этого испорченную скорость в `ref`-параметре.
+    /// </param>
+    /// <param name="maxSpeed">
+    /// Максимальная скорость изменения. Должна быть неотрицательной: предел
+    /// скорости величиной по модулю больше цели не имеет смысла. Ноль допустим и
+    /// означает «не двигаться».
+    /// </param>
     /// <param name="deltaTime">Время кадра в секундах.</param>
     /// <param name="velocity">Скорость на предыдущем кадре. Возвращается обновлённой.</param>
     /// <returns>Новое значение.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="smoothTime"/> не больше нуля либо
+    /// <paramref name="maxSpeed"/> отрицателен.
+    /// </exception>
+    /// <remarks>
+    /// Оба параметра проверяются здесь, а не полагаются на вложенные методы.
+    /// Без проверки отрицательный <paramref name="maxSpeed"/> переставлял границы
+    /// <see cref="Scalar.Clamp"/> и приводил к исключению с сообщением о
+    /// «минимальной границе» и с именем параметра <c>min</c>, которого в
+    /// сигнатуре этого метода нет: вызывающий получал в стеке <c>Clamp</c> и не
+    /// мог понять, что виноват его аргумент.
+    /// <para>
+    /// Неположительный <paramref name="deltaTime"/> исключением не является:
+    /// пауза и нулевой кадр — обычные случаи, и метод возвращает текущее
+    /// значение, не записывая в скорость <c>NaN</c>.
+    /// </para>
+    /// </remarks>
     public static float SmoothDamp(
         float current,
         float target,
@@ -170,6 +196,9 @@ public static class Interpolation
         float deltaTime,
         ref float velocity)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(smoothTime, 0f);
+        ArgumentOutOfRangeException.ThrowIfNegative(maxSpeed);
+
         smoothTime = MathF.Max(0.0001f, smoothTime);
 
         if (deltaTime <= 0f)

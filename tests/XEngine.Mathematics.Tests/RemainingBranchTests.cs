@@ -603,16 +603,24 @@ public class RemainingBranchTests
     }
 
     /// <summary>
-    /// Цвет обязан быть строкой или массивом: число вместо цвета означает
-    /// ошибку в файле, а не молчаливый чёрный.
+    /// Цвет обязан быть строкой, массивом или объектом с каналами: число
+    /// вместо цвета означает ошибку в файле, а не молчаливый чёрный.
     /// </summary>
+    /// <remarks>
+    /// Пустой объект <c>{}</c> раньше попадал в список отвергаемых, а пустой
+    /// массив <c>[]</c> принимался и давал непрозрачный чёрный. Это было то же
+    /// рассогласование, что закрытое P3-10 для нечислового элемента: одна и та же
+    /// величина, записанная двумя способами, читалась по-разному. С появлением
+    /// объектной формы у цвета обе формы обязаны совпадать, поэтому <c>{}</c>
+    /// теперь даёт то же, что и <c>[]</c>, и проверяется отдельно.
+    /// </remarks>
     [Fact]
     public void Json_ColorRejectsNonColorTokens()
     {
         JsonSerializerOptions options = Options();
 
-        // Ни строка, ни массив: ошибка формата с указанием ожидаемого вида.
-        foreach (string text in new[] { "1.5", "true", "{}" })
+        // Ни строка, ни массив, ни объект: ошибка формата с указанием ожидаемого вида.
+        foreach (string text in new[] { "1.5", "true" })
         {
             JsonException error = Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Rgba32>(text, options));
             Assert.Contains("#RRGGBB", error.Message, StringComparison.Ordinal);
@@ -620,6 +628,22 @@ public class RemainingBranchTests
 
         // Некорректная строка — ошибка разбора самого цвета.
         Assert.Throws<FormatException>(() => JsonSerializer.Deserialize<Rgba32>("\"мусор\"", options));
+    }
+
+    /// <summary>
+    /// Пустой объект и пустой массив обязаны читаться одинаково: обе формы
+    /// задают цвет без единого канала, то есть чёрный с альфой по умолчанию.
+    /// </summary>
+    [Fact]
+    public void Json_EmptyColorObjectMatchesEmptyColorArray()
+    {
+        JsonSerializerOptions options = Options();
+
+        Rgba32 fromArray = JsonSerializer.Deserialize<Rgba32>("[]", options);
+        Rgba32 fromObject = JsonSerializer.Deserialize<Rgba32>("{}", options);
+
+        Assert.Equal(fromArray, fromObject);
+        Assert.Equal(new Rgba32(0f, 0f, 0f, 1f), fromObject);
     }
 
     /// <summary>
