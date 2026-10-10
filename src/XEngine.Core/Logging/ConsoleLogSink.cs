@@ -12,10 +12,15 @@ namespace XEngine.Core.Logging;
 /// симуляции и с потока рендера (11.10), а <see cref="Console"/> сам этого не
 /// гарантирует.
 /// </para>
+/// <para>
+/// Строку собирает <see cref="LogFormatter"/>, общий с файловым приёмником:
+/// консоль и файл дают одинаковые строки, а правило одно на оба вывода.
+/// </para>
 /// </remarks>
 public sealed class ConsoleLogSink : ILogSink
 {
     private readonly LogLevel _minimumLevel;
+    private readonly LogFormatter _formatter;
     private readonly Lock _writeLock = new();
 
     /// <summary>
@@ -26,9 +31,14 @@ public sealed class ConsoleLogSink : ILogSink
     /// <see cref="LogLevel.Information"/>: отладочная выжимка без запроса не
     /// нужна.
     /// </param>
-    public ConsoleLogSink(LogLevel minimumLevel = LogLevel.Information)
+    /// <param name="formatter">
+    /// Формат строки. По умолчанию <see cref="LogFormatter"/> с настройками по
+    /// умолчанию.
+    /// </param>
+    public ConsoleLogSink(LogLevel minimumLevel = LogLevel.Information, LogFormatter? formatter = null)
     {
         _minimumLevel = minimumLevel;
+        _formatter = formatter ?? new LogFormatter();
     }
 
     /// <inheritdoc/>
@@ -46,16 +56,7 @@ public sealed class ConsoleLogSink : ILogSink
 
         lock (_writeLock)
         {
-            Console.WriteLine($"[{Describe(level)}] {message}");
+            Console.WriteLine(_formatter.Format(level, message));
         }
     }
-
-    private static string Describe(LogLevel level) => level switch
-    {
-        LogLevel.Debug => "DBG",
-        LogLevel.Information => "INF",
-        LogLevel.Warning => "WRN",
-        LogLevel.Error => "ERR",
-        _ => "???",
-    };
 }
