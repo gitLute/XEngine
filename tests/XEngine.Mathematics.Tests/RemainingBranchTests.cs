@@ -627,7 +627,7 @@ public class RemainingBranchTests
         }
 
         // Некорректная строка — ошибка разбора самого цвета.
-        Assert.Throws<FormatException>(() => JsonSerializer.Deserialize<Rgba32>("\"мусор\"", options));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<Rgba32>("\"мусор\"", options));
     }
 
     /// <summary>
