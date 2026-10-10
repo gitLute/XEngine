@@ -109,7 +109,7 @@ public readonly struct Ray3 : IEquatable<Ray3>
     /// </summary>
     /// <param name="bounds">Ограничивающий параллелепипед.</param>
     /// <returns><c>true</c>, если луч пересекает объём.</returns>
-    public bool Intersects(in Aabb3 bounds) => IntersectsBox(bounds, out _);
+    public bool Intersects(in Aabb3 bounds) => IntersectsBox(bounds, out _, out _);
 
     /// <summary>
     /// Проверяет пересечение с параллелепипедом и сообщает расстояние до
@@ -125,16 +125,18 @@ public readonly struct Ray3 : IEquatable<Ray3>
     /// Расстояние немного меньше расстояния до касания: точка, построенная по
     /// нему, лежит строго внутри объёма и принимается его проверкой
     /// принадлежности. Величина сдвига не превышает двух последних разрядов
-    /// координаты точки входа — на километре это около четверти микрометра.
+    /// координаты точки входа и никогда не превышает половины отрезка, который
+    /// луч вырезает в теле, — то есть на километре это доли миллиметра, а на
+    /// большой карте не может перескочить через объём.
     /// </remarks>
     public bool Raycast(in Aabb3 bounds, out float distance)
     {
-        if (!IntersectsBox(bounds, out distance))
+        if (!IntersectsBox(bounds, out distance, out float chord))
         {
             return false;
         }
 
-        distance = SurfaceRadius.PastContact(distance, Origin);
+        distance = SurfaceRadius.PastContact(distance, Origin, chord);
         return true;
     }
 
@@ -143,7 +145,7 @@ public readonly struct Ray3 : IEquatable<Ray3>
     /// </summary>
     /// <param name="sphere">Ограничивающая сфера.</param>
     /// <returns><c>true</c>, если луч пересекает сферу.</returns>
-    public bool Intersects(in BoundingSphere sphere) => IntersectsSphere(sphere, out _);
+    public bool Intersects(in BoundingSphere sphere) => IntersectsSphere(sphere, out _, out _);
 
     /// <summary>
     /// Проверяет пересечение со сферой и сообщает расстояние до входа.
@@ -158,12 +160,12 @@ public readonly struct Ray3 : IEquatable<Ray3>
     /// </remarks>
     public bool Raycast(in BoundingSphere sphere, out float distance)
     {
-        if (!IntersectsSphere(sphere, out distance))
+        if (!IntersectsSphere(sphere, out distance, out float chord))
         {
             return false;
         }
 
-        distance = SurfaceRadius.PastContact(distance, Origin);
+        distance = SurfaceRadius.PastContact(distance, Origin, chord);
         return true;
     }
 
@@ -192,7 +194,12 @@ public readonly struct Ray3 : IEquatable<Ray3>
             return false;
         }
 
-        distance = SurfaceRadius.PastContact(distance, Origin);
+        // Размер капсулы вдоль луча заранее неизвестен: вход может прийти и в
+        // эндкапсулу, и в боковую поверхность цилиндра, и хорда у них разная.
+        // Поэтому передаётся диаметр — величина, которая для любого луча,
+        // пересекающего тело, не превосходит настоящей хорды сверху, а для
+        // касательной равна нулю и сдвига не даёт вовсе.
+        distance = SurfaceRadius.PastContact(distance, Origin, capsule.Radius * 2f);
         return true;
     }
 
@@ -253,9 +260,10 @@ public readonly struct Ray3 : IEquatable<Ray3>
         return true;
     }
 
-    private bool IntersectsBox(in Aabb3 bounds, out float distance)
+    private bool IntersectsBox(in Aabb3 bounds, out float distance, out float chord)
     {
         distance = 0f;
+        chord = 0f;
         if (bounds.IsEmpty)
         {
             // У пустого параллелепипеда Min = +inf и Max = -inf: слэб-метод
@@ -291,6 +299,12 @@ public readonly struct Ray3 : IEquatable<Ray3>
         }
 
         distance = min;
+
+        // Отрезок, который луч вырезает в теле, — это ровно тот размер фигуры
+        // вдоль луча, которым ограничивается сдвиг точки входа. Он уже
+        // посчитан слэб-методом: избыточно его пересчитывать, иначе появился
+        // бы второй источник расхождения с той же геометрией.
+        chord = max - min;
         return true;
     }
 
@@ -346,9 +360,10 @@ public readonly struct Ray3 : IEquatable<Ray3>
         return min <= max;
     }
 
-    private bool IntersectsSphere(in BoundingSphere sphere, out float distance)
+    private bool IntersectsSphere(in BoundingSphere sphere, out float distance, out float chord)
     {
         distance = 0f;
+        chord = 0f;
         Vector3 toCenter = sphere.Center - Origin;
 
         float radius = sphere.Radius;
@@ -363,6 +378,10 @@ public readonly struct Ray3 : IEquatable<Ray3>
         // тот же знак entry.
         if (lengthSquared <= radiusSquared)
         {
+            // Луч начался внутри: хорда вся, и она равна диаметру. Начало
+            // внутри и так строго внутри, поэтому сдвига не требуется, но
+            // размер передан быть должен.
+            chord = radius * 2f;
             return true;
         }
 
@@ -394,6 +413,7 @@ public readonly struct Ray3 : IEquatable<Ray3>
         }
 
         distance = entry;
+        chord = halfChord * 2f;
         return true;
     }
 
@@ -410,8 +430,8 @@ public readonly struct Ray3 : IEquatable<Ray3>
             return true;
         }
 
-        bool hitSphereA = IntersectsSphere(new BoundingSphere(capsule.PointA, capsule.Radius), out float enterA);
-        bool hitSphereB = IntersectsSphere(new BoundingSphere(capsule.PointB, capsule.Radius), out float enterB);
+        bool hitSphereA = IntersectsSphere(new BoundingSphere(capsule.PointA, capsule.Radius), out float enterA, out _);
+        bool hitSphereB = IntersectsSphere(new BoundingSphere(capsule.PointB, capsule.Radius), out float enterB, out _);
 
         bool hitMiddle = IntersectsCylinder(capsule, out float enterCylinder);
 
@@ -478,7 +498,7 @@ public readonly struct Ray3 : IEquatable<Ray3>
         // капсулу-коллайдер, проходил насквозь.
         if (axisLengthSquared <= Scalar.Epsilon * Scalar.Epsilon)
         {
-            return IntersectsSphere(new BoundingSphere(capsule.PointA, radius), out distance);
+            return IntersectsSphere(new BoundingSphere(capsule.PointA, radius), out distance, out _);
         }
 
         double axisX = axis.X;

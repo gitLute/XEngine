@@ -1018,6 +1018,141 @@ public sealed class LengthAndSurfaceTests
             (float)(a.Z + (d[2] * t)));
     }
 
+    // ==================================================================
+    // Пункт 5. PastContact: сдвиг точки входа ограничен размером фигуры.
+
+    /// <summary>
+    /// Расстояние, сообщаемое лучом, обязано вести в точку, которую принимает
+    /// проверка принадлежности той же фигуре, при любом отношении расстояния до
+    /// размера фигуры.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отношение, а не метры: именно оно задаёт дефект, и проверка не должна
+    /// зависеть от единиц. Двадцать октав от 2^2 до 2^40 и пять размеров фигуры
+    /// от 0.05 до 1e5.
+    /// </para>
+    /// <para>
+    /// Прямой луч по оси X в сферу радиуса R: вход на расстоянии d, и
+    /// расстояние до входа и до выхода разделено хордой 2R. Настоящая ось
+    /// касательной не проверяется: там хорда равна нулю и построить строго
+    /// внутреннюю точку сдвигом по лучу невозможно в принципе.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Raycast_EntryPointStaysInsideAtEveryScaleRatio()
+    {
+        float[] radii = [0.05f, 0.22f, 1f, 1000f, 1e5f];
+        int rejected = 0;
+        string firstFailure = string.Empty;
+        int checks = 0;
+
+        for (int octave = 2; octave <= 40; octave++)
+        {
+            foreach (float radius in radii)
+            {
+                double wanted = radius * Math.Pow(2.0, octave);
+                if (wanted > float.MaxValue)
+                {
+                    continue;
+                }
+
+                float distance = (float)wanted;
+                Vector3 origin = new(-distance, 0f, 0f);
+                Ray3 ray = new(origin, new Vector3(1f, 0f, 0f));
+
+                BoundingSphere sphere = new(Vector3.Zero, radius);
+                if (!ray.Raycast(sphere, out float reported))
+                {
+                    continue;
+                }
+
+                checks++;
+                Vector3 point = ray.GetPoint(reported);
+                double excess = LengthAndSurfaceReference.Length(point) - radius;
+
+                // Допуск — величина самого округления: четыре последних разряда
+                // координаты результата. Всё, что превышает его, — выход за
+                // поверхность, а не погрешность.
+                double tolerance = 4.0 * Math.Max(Math.Abs(point.X), Math.Abs(point.Y)) * 1.1920929e-7;
+                if (excess <= tolerance)
+                {
+                    continue;
+                }
+
+                rejected++;
+                if (firstFailure.Length == 0)
+                {
+                    firstFailure = $"R = {radius}, отношение {Math.Pow(2.0, octave):E3}: вход {reported:E5}, точка {point}, выход {excess:E3} при допуске {tolerance:E3}";
+                }
+            }
+        }
+
+        Assert.True(checks > 150, $"Набор слишком мал: {checks} проверок.");
+        Assert.True(rejected == 0, $"Отказов {rejected} из {checks}. Первый: {firstFailure}");
+    }
+
+    /// <summary>
+    /// То же для параллелепипеда и для капсулы: у них свой размер вдоль луча,
+    /// и он обязан доходить до того же ограничения.
+    /// </summary>
+    /// <remarks>
+    /// Бокс проверяется на длинной диагонали — худший случай, потому что
+    /// хорда вдоль оси X на угловом луче намного меньше диагонали, и сдвиг
+    /// ограничивается большей величиной, чем нужно. Капсула — на радиусе
+    /// 0.25 и высоте 0.5, луч по оси Y.
+    /// </remarks>
+    [Fact]
+    public void Raycast_EntryPointStaysInsideForBoxAndCapsuleAtEveryScaleRatio()
+    {
+        int rejectedBox = 0;
+        int rejectedCapsule = 0;
+        string firstFailure = string.Empty;
+        int checks = 0;
+
+        for (int octave = 2; octave <= 34; octave++)
+        {
+            float ratio = (float)Math.Pow(2.0, octave);
+
+            Aabb3 box = Aabb3.FromCenterAndHalfSize(Vector3.Zero, new Vector3(1f));
+            Vector3 boxOrigin = new(-ratio, 0f, 0f);
+            Ray3 boxRay = new(boxOrigin, new Vector3(1f, 0f, 0f));
+            if (boxRay.Raycast(box, out float boxDistance))
+            {
+                checks++;
+                Vector3 point = boxRay.GetPoint(boxDistance);
+                if (!box.Contains(point))
+                {
+                    rejectedBox++;
+                    if (firstFailure.Length == 0)
+                    {
+                        firstFailure = $"бокс, отношение {ratio:E3}: точка {point} вне {box}";
+                    }
+                }
+            }
+
+            Capsule3 capsule = new(new Vector3(0f, -0.25f, 0f), new Vector3(0f, 0.25f, 0f), 0.25f);
+            Vector3 capsuleOrigin = new(0f, -ratio, 0f);
+            Ray3 capsuleRay = new(capsuleOrigin, new Vector3(0f, 1f, 0f));
+            if (capsuleRay.Raycast(capsule, out float capsuleDistance))
+            {
+                checks++;
+                Vector3 point = capsuleRay.GetPoint(capsuleDistance);
+                if (!capsule.Contains(point))
+                {
+                    rejectedCapsule++;
+                    if (firstFailure.Length == 0)
+                    {
+                        firstFailure = $"капсула, отношение {ratio:E3}: точка {point} вне капсулы";
+                    }
+                }
+            }
+        }
+
+        Assert.True(checks > 50, $"Набор слишком мал: {checks} проверок.");
+        Assert.True(rejectedBox + rejectedCapsule == 0, $"Отказов: бокс {rejectedBox}, капсула {rejectedCapsule}. Первый: {firstFailure}");
+    }
+
     /// <summary>
     /// Эталон, написанный независимо от проверяемого кода.
     /// </summary>
