@@ -24,8 +24,14 @@ public static class Vector3Extensions
     /// при квадрате 1e-30 квадраты отдельных компонент лежат на 1e-31 и выше,
     /// то есть ещё нормальные, и сумма не теряет разряды. Соответствующая
     /// длина — 1e-15.
+    /// <para>
+    /// Границы объявлены <c>internal</c>, а не <c>private</c>: ими пользуются
+    /// фигуры и плоскость, где тот же приём применяется точечно. Одна таблица
+    /// чисел на всю библиотеку — иначе «надёжный диапазон» в разных местах
+    /// означал бы разные числа.
+    /// </para>
     /// </remarks>
-    private const float MinNormalizableLengthSquared = 1e-30f;
+    internal const float MinNormalizableLengthSquared = 1e-30f;
 
     /// <summary>
     /// Верхняя граница квадрата длины, до которой сумма квадратов не
@@ -36,7 +42,7 @@ public static class Vector3Extensions
     /// конечен, а соответствующая длина 1.7320509e19 помещается в float со
     /// всем числом разрядов. Всё, что длиннее, считается масштабированием.
     /// </remarks>
-    private const float MaxNormalizableLengthSquared = 3e38f;
+    internal const float MaxNormalizableLengthSquared = 3e38f;
 
     /// <summary>
     /// Возвращает нормализованный вектор. Настоящий нулевой вектор остаётся
