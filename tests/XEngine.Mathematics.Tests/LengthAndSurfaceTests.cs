@@ -687,6 +687,337 @@ public sealed class LengthAndSurfaceTests
         Assert.True(wrong == 0, $"На обычных радиусах ответ изменился {wrong} раз. Первый: {firstWrong}");
     }
 
+    // ==================================================================
+    // Пункт 3. Вырожденные ветви построения точки поверхности.
+
+    /// <summary>
+    /// Запрос ровно в точку отсчёта обязан давать точку, которую сама фигура
+    /// принимает.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Положение точки отсчёта меняется, и это существенно. У нулевого центра
+    /// сложение точно представимо, и дефекта не видно: на такой геометрии
+    /// проходит любой код. Именно так был написан штатный тест
+    /// <c>SurfacePoint_DegenerateDirectionIsHandled</c> — с центром в нуле.
+    /// </para>
+    /// <para>
+    /// Прежний код возвращал точку с радиуса по построению и думал, что этого
+    /// достаточно. Не достаточно: округление сложения и обратного вычитания
+    /// не обязано вернуть исходное расстояние.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void SurfacePoint_AtBasePointIsAcceptedByItsOwnShape()
+    {
+        const int samples = 50000;
+        int rejectedSphere = 0;
+        int rejectedCapsule3 = 0;
+        int rejectedCircle = 0;
+        int rejectedCapsule2 = 0;
+        string firstFailure = string.Empty;
+
+        for (int i = 0; i < samples; i++)
+        {
+            float wobble1 = LengthAndSurfaceReference.Wobble(i, 1);
+            float wobble2 = LengthAndSurfaceReference.Wobble(i, 2);
+            float wobble3 = LengthAndSurfaceReference.Wobble(i, 3);
+            float wobble4 = LengthAndSurfaceReference.Wobble(i, 4);
+            float radius3 = 0.01f + (wobble4 * 10f);
+
+            Vector3 center3 = new(wobble1 * 100f, wobble2 * 100f, wobble3 * 100f);
+            BoundingSphere sphere = new(center3, radius3);
+            if (!sphere.Contains(sphere.ClosestPointOnSurface(center3)))
+            {
+                rejectedSphere++;
+                if (firstFailure.Length == 0)
+                {
+                    firstFailure = $"BoundingSphere, центр {center3}, радиус {radius3:R}";
+                }
+            }
+
+            Vector3 axisA = new(wobble1 * 100f, wobble2 * 100f, wobble3 * 100f);
+            Vector3 axisB = axisA + (LengthAndSurfaceReference.Unit(
+                wobble2 * 3f, wobble3 * 3f, wobble1 * 3f) * (0.01f + (wobble1 * 10f)));
+            Capsule3 capsule = new(axisA, axisB, radius3);
+            Vector3 onAxis = capsule.ClosestPointOnAxis(center3);
+            if (!capsule.Contains(capsule.ClosestPointTo(onAxis)))
+            {
+                rejectedCapsule3++;
+                if (firstFailure.Length == 0)
+                {
+                    firstFailure = $"Capsule3, ось {axisA}..{axisB}, радиус {radius3:R}";
+                }
+            }
+
+            Vector2 center2 = new(wobble1 * 100f, wobble2 * 100f);
+            float radius2 = 0.01f + (wobble4 * 10f);
+            Circle2 circle = new(center2, radius2);
+            if (!circle.Contains(circle.ClosestPointOnBoundary(center2)))
+            {
+                rejectedCircle++;
+                if (firstFailure.Length == 0)
+                {
+                    firstFailure = $"Circle2, центр {center2}, радиус {radius2:R}";
+                }
+            }
+
+            Vector2 flatA = new(wobble1 * 100f, wobble2 * 100f);
+            Vector2 flatB = flatA + (new Vector2(wobble3 * 3f, wobble1 * 3f).SafeNormalize() * (0.01f + (wobble2 * 10f)));
+            Capsule2 capsule2 = new(new Segment2(flatA, flatB), radius2);
+            Vector2 onFlatAxis = new Segment2(flatA, flatB).ClosestPointTo(center2);
+            if (!capsule2.Contains(capsule2.ClosestPointOnBoundary(onFlatAxis)))
+            {
+                rejectedCapsule2++;
+                if (firstFailure.Length == 0)
+                {
+                    firstFailure = $"Capsule2, ось {flatA}..{flatB}, радиус {radius2:R}";
+                }
+            }
+        }
+
+        int total = rejectedSphere + rejectedCapsule3 + rejectedCircle + rejectedCapsule2;
+        Assert.True(
+            total == 0,
+            $"Фигура отвергла собственную точку поверхности: BoundingSphere {rejectedSphere}, Capsule3 {rejectedCapsule3}, "
+            + $"Circle2 {rejectedCircle}, Capsule2 {rejectedCapsule2} — всего {total} из {samples * 4}. Первый случай: {firstFailure}");
+    }
+
+    /// <summary>
+    /// Запрос вблизи точки отсчёта, но не ровно в неё, обязан попадать в ту же
+    /// ветвь, что и раньше, — то есть сдвиг применяться должен и там.
+    /// </summary>
+    /// <remarks>
+    /// Прежний <c>BoundingSphere</c> отсекал любой запрос ближе
+    /// <see cref="Scalar.Epsilon"/> и возвращал точку без сдвига; у <c>Circle2</c>
+    /// и <c>Capsule2</c> порог уже был заменён на точный ноль, у <c>Capsule3</c> —
+    /// нет. Здесь смещение берётся около порога, то есть там, где прежний код
+    /// переходил на вырожденную ветвь.
+    /// </remarks>
+    [Fact]
+    public void SurfacePoint_NearBasePointStillUsesShiftedRadius()
+    {
+        const int samples = 20000;
+        int rejected = 0;
+        string firstFailure = string.Empty;
+
+        for (int i = 0; i < samples; i++)
+        {
+            float wobble = LengthAndSurfaceReference.Wobble(i, 1);
+            float radius = 0.05f + (wobble * 4f);
+            Vector3 center = new(
+                LengthAndSurfaceReference.Wobble(i, 2) * 1000f,
+                LengthAndSurfaceReference.Wobble(i, 3) * 1000f,
+                LengthAndSurfaceReference.Wobble(i, 4) * 1000f);
+
+            // Смещение чуть больше прежнего порога в 1e-6 и чуть меньше него:
+            // обе величины должны пройти одинаково.
+            float offset = Scalar.Epsilon * (i % 2 == 0 ? 0.5f : 4f);
+            Vector3 query = center + new Vector3(offset, 0f, 0f);
+
+            BoundingSphere sphere = new(center, radius);
+            if (sphere.Contains(sphere.ClosestPointOnSurface(query)))
+            {
+                continue;
+            }
+
+            rejected++;
+            if (firstFailure.Length == 0)
+            {
+                firstFailure = $"центр {center}, радиус {radius:R}, смещение {offset:E3}, точка {sphere.ClosestPointOnSurface(query)}";
+            }
+        }
+
+        Assert.True(rejected == 0, $"Отказов {rejected} из {samples}. Первый: {firstFailure}");
+    }
+
+    // ==================================================================
+    // Пункт 4. Capsule3: абсолютный порог вырожденности.
+
+    /// <summary>
+    /// Вердикт <see cref="Capsule3.Contains"/> не должен зависеть от выбора
+    /// единиц: одна и та же относительная геометрия обязана давать один и тот
+    /// же ответ при любом масштабе.
+    /// </summary>
+    /// <remarks>
+    /// Геометрия задана ровно так, как в первой волне: ось длиной 0.5, радиус
+    /// 0.25, запрос на 0.2 от середины. Математически точка внутри при любом
+    /// масштабе. Прежний порог <c>Epsilon²</c> отбрасывал ось короче 1e-6 и
+    /// подставлял <see cref="Capsule3.PointA"/>, после чего расстояние считалось
+    /// от неё: 0.32 вместо 0.2, то есть вердикт переворачивался.
+    /// <para>
+    /// Эталон расстояния до оси считается независимо, в <c>double</c>, по самим
+    /// концам отрезка, а не через <see cref="Capsule3.ClosestPointOnAxis"/>:
+    /// иначе мера повторяла бы проверяемый код и прошла бы на прежней правке.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Capsule3_ContainsDoesNotDependOnWorldScale()
+    {
+        float[] scales =
+        [
+            1f, 1e-1f, 1e-2f, 1e-3f, 1e-4f, 1e-5f, 1e-6f, 1e-7f,
+            1e-8f, 1e-10f, 1e-12f, 1e-15f, 1e-18f, 1e-19f, 1e-20f, 1e-25f,
+        ];
+
+        int flipped = 0;
+        string firstFlip = string.Empty;
+
+        foreach (float scale in scales)
+        {
+            Capsule3 capsule = new(Vector3.Zero, new Vector3(0f, 0.5f * scale, 0f), 0.25f * scale);
+            Vector3 probe = new(0.2f * scale, 0.25f * scale, 0f);
+
+            bool got = capsule.Contains(probe);
+            double distance = LengthAndSurfaceReference.SegmentDistance(
+                capsule.PointA, capsule.PointB, probe, probe);
+            bool want = distance <= (double)capsule.Radius;
+
+            if (got == want)
+            {
+                continue;
+            }
+
+            flipped++;
+            if (firstFlip.Length == 0)
+            {
+                firstFlip = $"масштаб {scale:E2}: вернуло {got}, эталон {want}, расстояние до оси {distance:E3} при радиусе {capsule.Radius:E3}";
+            }
+        }
+
+        Assert.True(flipped == 0, $"Вердикт изменился при {flipped} масштабах из {scales.Length}. Первый: {firstFlip}");
+    }
+
+    /// <summary>
+    /// То же для <see cref="Capsule3.Intersects"/>, где порог вырожденности
+    /// был другим, но той же природы: абсолютным.
+    /// </summary>
+    /// <remarks>
+    /// Ось A идёт вдоль Y от 0 до 0.5, ось B поперёк неё ровно посередине.
+    /// Расстояние между осями ноль, то есть ответ «пересекаются» верен при
+    /// любом масштабе. Прежний порог 1e-12 на квадрате длины отбрасывал обе
+    /// оси короче 1e-6 и подставлял концы, после чего расстояние считалось от
+    /// концов и оказывалось 0.25 против суммы радиусов 0.2.
+    /// </remarks>
+    [Fact]
+    public void Capsule3_IntersectsDoesNotDependOnWorldScale()
+    {
+        float[] scales = [1f, 1e-1f, 1e-2f, 1e-3f, 1e-4f, 1e-5f, 1e-6f, 1e-7f, 1e-8f, 1e-10f, 1e-12f];
+        int flipped = 0;
+        string firstFlip = string.Empty;
+
+        foreach (float scale in scales)
+        {
+            Capsule3 first = new(Vector3.Zero, new Vector3(0f, 0.5f * scale, 0f), 0.1f * scale);
+            Capsule3 second = new(
+                new Vector3(-scale, 0.25f * scale, 0f),
+                new Vector3(scale, 0.25f * scale, 0f),
+                0.1f * scale);
+
+            bool got = first.Intersects(second);
+            double distance = LengthAndSurfaceReference.SegmentDistance(
+                first.PointA, first.PointB, second.PointA, second.PointB);
+            bool want = distance <= (double)first.Radius + second.Radius;
+
+            if (got == want)
+            {
+                continue;
+            }
+
+            flipped++;
+            if (firstFlip.Length == 0)
+            {
+                firstFlip = $"масштаб {scale:E2}: вернуло {got}, эталон {want}, расстояние между осями {distance:E3}";
+            }
+        }
+
+        Assert.True(flipped == 0, $"Вердикт изменился при {flipped} масштабах из {scales.Length}. Первый: {firstFlip}");
+    }
+
+    /// <summary>
+    /// <see cref="Capsule3.ClosestPointOnAxis"/> обязан давать настоящую
+    /// ближайшую точку отрезка при любом масштабе, а не конец оси.
+    /// </summary>
+    /// <remarks>
+    /// Эталон — параметр проекции, посчитанный в <c>double</c> по концам
+    /// отрезка. Запрос ставится за серединой оси, то есть именно там, где
+    /// подстановка <see cref="Capsule3.PointA"/> давала ошибку в 100 % длины
+    /// оси.
+    /// </remarks>
+    [Fact]
+    public void Capsule3_ClosestPointOnAxisIsExactAtAnyScale()
+    {
+        float[] scales = [1f, 1e-2f, 1e-4f, 1e-5f, 1e-6f, 1e-7f, 1e-8f, 1e-10f, 1e-12f, 1e-15f];
+        int failures = 0;
+        string firstFailure = string.Empty;
+
+        foreach (float scale in scales)
+        {
+            Vector3 a = new(0.3f, -0.2f, 0.1f);
+            Vector3 b = a + new Vector3(0.4f, 0.5f, 0.2f);
+            b *= scale;
+            a *= scale;
+
+            // Запрос за серединой оси: расстояние до отрезка и до прямой там
+            // различаются, и подстановка конца оси видна сразу.
+            Vector3 probe = (a + b) * 0.5f + new Vector3(0f, scale, scale);
+
+            Capsule3 capsule = new(a, b, 0.1f * scale);
+            Vector3 got = capsule.ClosestPointOnAxis(probe);
+
+            Vector3 reference = ReferenceClosestOnSegment(a, b, probe);
+            double error = LengthAndSurfaceReference.Length(got - reference);
+            double tolerance = 4.0 * Math.Max(1e-30, (double)scale) * 1.1920929e-7;
+
+            if (error <= tolerance)
+            {
+                continue;
+            }
+
+            failures++;
+            if (firstFailure.Length == 0)
+            {
+                firstFailure = $"масштаб {scale:E2}: вернулось {got} вместо {reference}, ошибка {error:E3}";
+            }
+        }
+
+        Assert.True(failures == 0, $"Ошибка в {failures} случаях из {scales.Length}. Первый: {firstFailure}");
+    }
+
+    /// <summary>
+    /// Ближайшая точка отрезка по точному значению в <c>double</c>: тот же
+    /// алгоритм, что и в проверяемом коде, но на других типах.
+    /// </summary>
+    /// <param name="a">Начало отрезка.</param>
+    /// <param name="b">Конец отрезка.</param>
+    /// <param name="point">Проверяемая точка.</param>
+    /// <returns>Ближайшая точка отрезка.</returns>
+    private static Vector3 ReferenceClosestOnSegment(Vector3 a, Vector3 b, Vector3 point)
+    {
+        double[] d =
+        [
+            (double)b.X - a.X,
+            (double)b.Y - a.Y,
+            (double)b.Z - a.Z,
+        ];
+        double[] w =
+        [
+            (double)point.X - a.X,
+            (double)point.Y - a.Y,
+            (double)point.Z - a.Z,
+        ];
+
+        double squared = (d[0] * d[0]) + (d[1] * d[1]) + (d[2] * d[2]);
+        double t = squared == 0.0
+            ? 0.0
+            : Math.Clamp(((w[0] * d[0]) + (w[1] * d[1]) + (w[2] * d[2])) / squared, 0.0, 1.0);
+
+        return new Vector3(
+            (float)(a.X + (d[0] * t)),
+            (float)(a.Y + (d[1] * t)),
+            (float)(a.Z + (d[2] * t)));
+    }
+
     /// <summary>
     /// Эталон, написанный независимо от проверяемого кода.
     /// </summary>
@@ -720,6 +1051,76 @@ public sealed class LengthAndSurfaceTests
 
         public static double Length(Vector2 value)
             => Math.Sqrt(LengthSquared(value));
+
+        /// <summary>
+        /// Расстояние от точки до отрезка по стандартной формуле в
+        /// <c>double</c>. Написана независимо от проверяемого кода: параметры
+        /// прямых, точка сближения и отрезок параметров.
+        /// </summary>
+        /// <param name="p1">Начало первого отрезка.</param>
+        /// <param name="q1">Конец первого отрезка.</param>
+        /// <param name="p2">Начало второго отрезка.</param>
+        /// <param name="q2">Конец второго отрезка.</param>
+        /// <returns>Расстояние между отрезками.</returns>
+        public static double SegmentDistance(Vector3 p1, Vector3 q1, Vector3 p2, Vector3 q2)
+        {
+            double[] d1 = [(double)q1.X - p1.X, (double)q1.Y - p1.Y, (double)q1.Z - p1.Z];
+            double[] r = [(double)p1.X - p2.X, (double)p1.Y - p2.Y, (double)p1.Z - p2.Z];
+            double[] d2 = [(double)q2.X - p2.X, (double)q2.Y - p2.Y, (double)q2.Z - p2.Z];
+
+            double a = Dot(d1, d1);
+            double e = Dot(d2, d2);
+            double f = Dot(d2, r);
+            double s;
+            double t;
+
+            if (a <= 0.0 && e <= 0.0)
+            {
+                s = 0.0;
+                t = 0.0;
+            }
+            else if (a <= 0.0)
+            {
+                s = 0.0;
+                t = Math.Clamp(f / e, 0.0, 1.0);
+            }
+            else
+            {
+                double c = Dot(d1, r);
+                if (e <= 0.0)
+                {
+                    t = 0.0;
+                    s = Math.Clamp(-c / a, 0.0, 1.0);
+                }
+                else
+                {
+                    double b = Dot(d1, d2);
+                    double denominator = (a * e) - (b * b);
+                    s = denominator != 0.0
+                        ? Math.Clamp(((b * f) - (c * e)) / denominator, 0.0, 1.0)
+                        : 0.0;
+                    t = ((b * s) + f) / e;
+                    if (t < 0.0)
+                    {
+                        t = 0.0;
+                        s = Math.Clamp(-c / a, 0.0, 1.0);
+                    }
+                    else if (t > 1.0)
+                    {
+                        t = 1.0;
+                        s = Math.Clamp((b - c) / a, 0.0, 1.0);
+                    }
+                }
+            }
+
+            double cx = r[0] + (d1[0] * s) - (d2[0] * t);
+            double cy = r[1] + (d1[1] * s) - (d2[1] * t);
+            double cz = r[2] + (d1[2] * s) - (d2[2] * t);
+            return Math.Sqrt((cx * cx) + (cy * cy) + (cz * cz));
+        }
+
+        private static double Dot(double[] a, double[] b)
+            => (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2]);
 
         /// <summary>
         /// Единичный вектор по точному значению в <c>double</c>, округлённый к

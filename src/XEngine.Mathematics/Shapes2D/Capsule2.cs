@@ -139,8 +139,13 @@ public readonly struct Capsule2 : IEquatable<Capsule2>
         // оси ошибка равнялась 141.42 % радиуса, потому что возвращённая точка
         // оказывалась по другую сторону оси. Точный ноль — это запрос ровно на
         // оси: направления нет, подходит любая точка границы.
+        //
+        // Сдвиг обязателен и здесь. Точка с радиуса по построению лежит на
+        // границе лишь в приближении float, и при неудачном положении оси
+        // Contains отвечает на неё false: измерено 9630 отказов из 50000
+        // запросов ровно на ось, то есть 19.3 %.
         return delta == Vector2.Zero
-            ? closest + new Vector2(Radius, 0f)
+            ? closest + new Vector2(SurfaceRadius.For(Radius, closest), 0f)
             : closest + (delta.SafeNormalize() * SurfaceRadius.For(Radius, closest));
     }
 
