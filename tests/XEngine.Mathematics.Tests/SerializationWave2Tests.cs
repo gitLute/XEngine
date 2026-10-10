@@ -928,6 +928,112 @@ public sealed class SerializationWave2Tests
     }
 
     /// <summary>
+    /// Файл сохранения читают потоком, а не строкой, и значение больше
+    /// внутреннего буфера читателя (16 КБ) приходит при <c>isFinalBlock: false</c>
+    /// — это отдельный путь <c>Skip()</c>. Проверка ставит вектор ровно на
+    /// границу буфера.
+    /// </summary>
+    /// <remarks>
+    /// Страховка, а не обратный ход: на прежнем коде она тоже зелёная — правка
+    /// не должна была сломать потоковое чтение, и это проверяется отдельно.
+    /// </remarks>
+    [Fact]
+    public void StreamedSaveLargerThanReaderBufferIsReadCorrectly()
+    {
+        JsonSerializerOptions options = Options();
+
+        string probe = JsonSerializer.Serialize(new SaveStub(), options);
+        int offset = probe.IndexOf("\"Position\"", StringComparison.Ordinal);
+        string padding = new('p', (16 * 1024) - 6 - offset);
+        SaveStub source = new()
+        {
+            Pad = padding,
+            Position = new Vector3(1.5f, 2.5f, 3.5f),
+            Color = new Rgba32(1f, 0.5f, 0f, 1f),
+            Turn = Angle.FromRadians(0.5),
+        };
+
+        string json = JsonSerializer.Serialize(source, options);
+        Assert.True(json.Length > 16 * 1024, $"Файл должен быть больше буфера читателя, получилось {json.Length}.");
+
+        foreach (int chunk in new[] { 4096, 16384, 65536 })
+        {
+            using ChunkedStream stream = new(json, chunk);
+            SaveStub read = JsonSerializer.Deserialize<SaveStub>(stream, options)!;
+
+            MathAssert.Equal(source.Position, read.Position);
+            SameColor(source.Color, read.Color, (0.5f / 255f) + 1e-6f);
+            Assert.Equal(source.Turn.Radians, read.Turn.Radians);
+            Assert.Equal(padding.Length, read.Pad.Length);
+        }
+    }
+
+    private sealed class SaveStub
+    {
+        public string Pad { get; set; } = string.Empty;
+
+        public Vector3 Position { get; set; }
+
+        public Rgba32 Color { get; set; }
+
+        public Angle Turn { get; set; }
+    }
+
+    /// <summary>
+    /// Поток, отдающий данные порциями: так проверяется путь чтения с короткими
+    /// блоками, который и используется при загрузке файла.
+    /// </summary>
+    private sealed class ChunkedStream : Stream
+    {
+        private readonly byte[] _data;
+        private readonly int _chunk;
+        private int _position;
+
+        public ChunkedStream(string json, int chunk)
+        {
+            _data = Encoding.UTF8.GetBytes(json);
+            _chunk = chunk;
+        }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _data.Length;
+
+        public override long Position
+        {
+            get => _position;
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int take = Math.Min(Math.Min(count, _chunk), _data.Length - _position);
+            if (take <= 0)
+            {
+                return 0;
+            }
+
+            Array.Copy(_data, _position, buffer, offset, take);
+            _position += take;
+            return take;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    /// <summary>
     /// Сравнение цветов по каналам без допуска: разбор задаёт каналы точными
     /// числами из файла, поэтому и расхождение видно точно, а не «в пределах
     /// шага квантования в байт».
@@ -935,11 +1041,22 @@ public sealed class SerializationWave2Tests
     /// <param name="expected">Ожидаемый цвет.</param>
     /// <param name="actual">Полученный цвет.</param>
     private static void SameColor(Rgba32 expected, Rgba32 actual)
+        => SameColor(expected, actual, 0f);
+
+    /// <summary>
+    /// То же сравнение с допуском. Нулевой допуск годится там, где каналы
+    /// приходят из файла числами; после похода через hex-строку цвет квантуется до
+    /// байта, и предел точности равен половине шага 1/255.
+    /// </summary>
+    /// <param name="expected">Ожидаемый цвет.</param>
+    /// <param name="actual">Полученный цвет.</param>
+    /// <param name="tolerance">Допуск по каналу.</param>
+    private static void SameColor(Rgba32 expected, Rgba32 actual, float tolerance)
     {
-        MathAssert.Equal(expected.R, actual.R, 0f);
-        MathAssert.Equal(expected.G, actual.G, 0f);
-        MathAssert.Equal(expected.B, actual.B, 0f);
-        MathAssert.Equal(expected.A, actual.A, 0f);
+        MathAssert.Equal(expected.R, actual.R, tolerance);
+        MathAssert.Equal(expected.G, actual.G, tolerance);
+        MathAssert.Equal(expected.B, actual.B, tolerance);
+        MathAssert.Equal(expected.A, actual.A, tolerance);
     }
 
     private static Dictionary<TKey, int> RoundTrip<TKey>(Dictionary<TKey, int> source, JsonSerializerOptions options)
