@@ -510,6 +510,183 @@ public sealed class LengthAndSurfaceTests
         Assert.True(failures == 0, firstFailure.Length == 0 ? "все случаи верны" : firstFailure);
     }
 
+    // ==================================================================
+    // Пункт 2. BoundingSphere: сравнение квадратов вместо расстояний.
+
+    /// <summary>
+    /// П2-39: <see cref="BoundingSphere.Contains"/> обязана отвечать по
+    /// расстоянию, а не по квадрату радиуса.
+    /// </summary>
+    /// <remarks>
+    /// Эталон — расстояние в <c>double</c>, то есть величина, которая на любом
+    /// масштабе вычислима. Радиусы берутся по обе стороны от границ, где
+    /// квадрат обнуляется (1.057e-19) и переполняется (1.8446744e19).
+    /// </remarks>
+    [Fact]
+    public void BoundingSphere_ContainsFollowsDistanceAtEveryRadius()
+    {
+        float[] radii =
+        [
+            1e-40f, 1e-30f, 1e-19f, 1e-6f, 1f, 1e6f, 1e18f,
+            1.8e19f, 1.8446743e19f, 1.8446744e19f, 2e19f, 1e25f, 3.4e38f,
+        ];
+
+        int wrong = 0;
+        string firstWrong = string.Empty;
+
+        // Точки на долях радиуса. Множитель 1 не берётся: там ответ решает
+        // последний разряд округления, и проверка измеряла бы не дефект, а
+        // границу представления. Всё остальное — заведомо внутри или
+        // заведомо снаружи.
+        float[] factors = [-0.5f, 0f, 0.25f, 0.5f, 0.75f, 0.9f, 1.1f, 1.25f, 1.5f, 2f];
+
+        foreach (float radius in radii)
+        {
+            Vector3 center = new(3f, -2f, 7f);
+            BoundingSphere sphere = new(center, radius);
+
+            foreach (float factor in factors)
+            {
+                    Vector3 direction = LengthAndSurfaceReference.Unit(factor * 3f, factor * -4f, factor * 12f);
+                Vector3 point = center + (direction * (radius * factor));
+
+                bool got = sphere.Contains(point);
+                double distance = LengthAndSurfaceReference.Length(point - center);
+                bool want = distance <= (double)radius;
+
+                if (got == want)
+                {
+                    continue;
+                }
+
+                wrong++;
+                if (firstWrong.Length == 0)
+                {
+                    firstWrong = $"R = {radius:R}, множитель {factor}: {point} вернуло {got}, эталон {want} (расстояние {distance:E3})";
+                }
+            }
+        }
+
+        Assert.True(wrong == 0, $"Неверных ответов {wrong}. Первый: {firstWrong}");
+    }
+
+    /// <summary>
+    /// П2-39: то же для <see cref="BoundingSphere.Intersects"/>, причём на
+    /// случайных парах сфер, а не на построенных.
+    /// </summary>
+    [Fact]
+    public void BoundingSphere_IntersectsFollowsDistanceAtEveryRadius()
+    {
+        float[] radii =
+        [
+            0f, 1e-30f, 1e-19f, 1e-6f, 1f, 1e6f, 1e18f,
+            1.5e19f, 1.7e19f, 1.8e19f, 2e19f, 1e25f,
+        ];
+
+        int wrong = 0;
+        string firstWrong = string.Empty;
+        int checks = 0;
+
+        for (int i = 0; i < 120000; i++)
+        {
+            float radiusA = radii[i % radii.Length];
+            float radiusB = radii[(i / radii.Length) % radii.Length];
+
+            Vector3 direction = LengthAndSurfaceReference.Unit(
+                LengthAndSurfaceReference.Wobble(i, 1),
+                LengthAndSurfaceReference.Wobble(i, 2),
+                LengthAndSurfaceReference.Wobble(i, 3));
+            if (direction == Vector3.Zero)
+            {
+                continue;
+            }
+
+            // Центры строятся от нуля в масштабе суммы радиусов. Если взять
+            // постоянный центр вроде (7, −3, 11), то при радиусах порядка 1e-30
+            // смещение на расстоянии в 1e-30 вообще не представимо: центры
+            // сливаются, и проверка измеряла бы не дефект, а разрешение float.
+            // Расстояние между центрами — фактическое, в double, а не
+            // запрошенное: запрошенное может не совпасть с получившимся.
+            float sum = radiusA + radiusB;
+
+            // Центры строятся от нуля в масштабе суммы радиусов. Если взять
+            // постоянный центр вроде (7, −3, 11), то при радиусах порядка 1e-30
+            // смещение на расстоянии в 1e-30 вообще не представимо: центры
+            // сливаются, и проверка измеряла бы не дефект, а разрешение float.
+            // Расстояние между центрами — фактическое, в double, а не
+            // запрошенное: запрошенное может не совпасть с получившимся.
+            Vector3 centerA = direction * (sum == 0f ? 1f : sum * 4f);
+            float separation = sum == 0f ? 1f : sum * (0.5f + (1.5f * LengthAndSurfaceReference.Wobble(i, 4)));
+
+            Vector3 centerB = centerA + (direction * separation);
+
+            BoundingSphere first = new(centerA, radiusA);
+            BoundingSphere second = new(centerB, radiusB);
+
+            bool got = first.Intersects(second);
+            double actual = LengthAndSurfaceReference.Length(centerB - centerA);
+            bool want = actual <= sum;
+            checks++;
+
+            if (got == want)
+            {
+                continue;
+            }
+
+            wrong++;
+            if (firstWrong.Length == 0)
+            {
+                firstWrong = $"R₁ = {radiusA:R}, R₂ = {radiusB:R}, расстояние {actual:E3} при сумме {sum:R}: вернуло {got}, эталон {want}";
+            }
+        }
+
+        Assert.True(checks > 100000, $"Набор слишком мал: {checks} пар.");
+        Assert.True(wrong == 0, $"Неверных ответов {wrong} из {checks}. Первый: {firstWrong}");
+    }
+
+    /// <summary>
+    /// Обычные радиусы должны вести себя точно как прежде: ветвление не
+    /// должно менять ответ на игровом масштабе.
+    /// </summary>
+    [Fact]
+    public void BoundingSphere_OrdinaryRadiiBehaveExactly()
+    {
+        float[] radii = [0f, 1e-6f, 0.05f, 0.25f, 1f, 1000f, 1e6f];
+        int wrong = 0;
+        string firstWrong = string.Empty;
+
+        for (int i = 0; i < 100000; i++)
+        {
+            float radius = radii[i % radii.Length];
+            Vector3 center = new(
+                LengthAndSurfaceReference.Wobble(i, 1) * 100f,
+                LengthAndSurfaceReference.Wobble(i, 2) * 100f,
+                LengthAndSurfaceReference.Wobble(i, 3) * 100f);
+            Vector3 point = center + (LengthAndSurfaceReference.Unit(
+                LengthAndSurfaceReference.Wobble(i, 4),
+                LengthAndSurfaceReference.Wobble(i, 5),
+                LengthAndSurfaceReference.Wobble(i, 6)) * (radius * LengthAndSurfaceReference.Wobble(i, 7) * 2f));
+
+            bool got = new BoundingSphere(center, radius).Contains(point);
+
+            // Прежняя формула, вычисленная буквально: на этих радиусах квадрат
+            // надёжен, и ответ обязан совпасть побитово.
+            bool want = (point - center).LengthSquared() <= radius * radius;
+            if (got == want)
+            {
+                continue;
+            }
+
+            wrong++;
+            if (firstWrong.Length == 0)
+            {
+                firstWrong = $"R = {radius:R}, центр {center}, точка {point}: {got} вместо {want}";
+            }
+        }
+
+        Assert.True(wrong == 0, $"На обычных радиусах ответ изменился {wrong} раз. Первый: {firstWrong}");
+    }
+
     /// <summary>
     /// Эталон, написанный независимо от проверяемого кода.
     /// </summary>
