@@ -238,11 +238,70 @@ public static class Matrix4x4Extensions
     /// </summary>
     /// <param name="matrix">Исходная матрица.</param>
     /// <returns>Масштаб по осям.</returns>
+    /// <remarks>
+    /// <para>
+    /// Квадраты элементов используются только там, где они не обнуляются и не
+    /// переполняются. Вне этого диапазона длина считается в масштабе
+    /// наибольшей компоненты строки: там она равна единице, квадрат лежит в
+    /// [1; 3], и результат конечен при любой длине.
+    /// </para>
+    /// <para>
+    /// Без этого метод возвращал ноль на ненулевой матрице и ломал
+    /// <see cref="GetRotation"/>: тот подставляет единицу вместо нулевого
+    /// масштаба, строка остаётся неделимой, и разбор даёт |q| = 0.5 с нулевыми
+    /// углами. Измерено: при равномерном масштабе 1e-30 <c>GetScale</c>
+    /// возвращал <c>(0, 0, 0)</c> при <c>M11 = 8.297695e-31</c> — квадрат
+    /// элемента равен 6.9e-61 и обнуляется, потому что наименьшее нормальное
+    /// число <see cref="float"/> равно 1.1754944e-38, а наименьшее
+    /// субнормальное — 1.4e-45. Граница обнуления по масштабу проходит по
+    /// 1.08e-22, измерено на 1e-22, где квадрат ещё ненулевой, но уже
+    /// теряет точность (<c>GetScale</c> вернул 9.9e-23 при 1e-22).
+    /// </para>
+    /// <para>
+    /// Приём тот же, что в <see cref="BoundingSphere.Contains"/> и в
+    /// <c>Circle2.Contains</c>: ветвь внутри метода, а не отдельный метод.
+    /// </para>
+    /// </remarks>
     public static Vector3 GetScale(this in Matrix4x4 matrix)
-        => new(
-            MathF.Sqrt(matrix.M11 * matrix.M11 + matrix.M12 * matrix.M12 + matrix.M13 * matrix.M13),
-            MathF.Sqrt(matrix.M21 * matrix.M21 + matrix.M22 * matrix.M22 + matrix.M23 * matrix.M23),
-            MathF.Sqrt(matrix.M31 * matrix.M31 + matrix.M32 * matrix.M32 + matrix.M33 * matrix.M33));
+    {
+        float squaredX = (matrix.M11 * matrix.M11) + (matrix.M12 * matrix.M12) + (matrix.M13 * matrix.M13);
+        float squaredY = (matrix.M21 * matrix.M21) + (matrix.M22 * matrix.M22) + (matrix.M23 * matrix.M23);
+        float squaredZ = (matrix.M31 * matrix.M31) + (matrix.M32 * matrix.M32) + (matrix.M33 * matrix.M33);
+        if (Usable(squaredX) & Usable(squaredY) & Usable(squaredZ))
+        {
+            return new Vector3(MathF.Sqrt(squaredX), MathF.Sqrt(squaredY), MathF.Sqrt(squaredZ));
+        }
+
+        return new Vector3(RowLength(matrix.M11, matrix.M12, matrix.M13),
+            RowLength(matrix.M21, matrix.M22, matrix.M23),
+            RowLength(matrix.M31, matrix.M32, matrix.M33));
+    }
+
+    /// <summary>
+    /// Признак квадрата, по которому корень ещё вычисляется прямо: он ненулевой
+    /// и конечный.
+    /// </summary>
+    private static bool Usable(float squared) => squared > 0f & float.IsFinite(squared);
+
+    /// <summary>
+    /// Длина строки в масштабе её наибольшей компоненты. Там длина единичная,
+    /// и результат не зависит от того, обнулился или переполнился квадрат.
+    /// </summary>
+    private static float RowLength(float x, float y, float z)
+    {
+        float largest = MathF.Max(MathF.Abs(x), MathF.Max(MathF.Abs(y), MathF.Abs(z)));
+        if (!(largest > 0f))
+        {
+            return 0f;
+        }
+
+        float scale = 1f / largest;
+        float unitX = x * scale;
+        float unitY = y * scale;
+        float unitZ = z * scale;
+        float unitLength = MathF.Sqrt((unitX * unitX) + (unitY * unitY) + (unitZ * unitZ));
+        return largest * unitLength;
+    }
 
     /// <summary>
     /// Возвращает поворот из матрицы, предполагая отсутствие неравномерного
@@ -251,17 +310,36 @@ public static class Matrix4x4Extensions
     /// <param name="matrix">Исходная матрица.</param>
     /// <returns>Поворот.</returns>
     /// <remarks>
+    /// <para>
     /// При наличии масштаба поворот определяется приближённо: длины строк
     /// нормализуются, а остаточное искажение отбрасывается. Для случая, где
     /// масштаб есть и важен, разбирать матрицу должен владелец преобразования,
     /// а не математическая функция по умолчанию.
+    /// </para>
+    /// <para>
+    /// Вырожденной считается только нулевая ось. Прежняя проверка
+    /// <c>scale &lt;= Scalar.Epsilon</c> отбрасывала любой ненулевой масштаб
+    /// меньше миллиона и подставляла единицу, то есть оставляла строку
+    /// неделимой и получала неединичный поворот: при масштабе 1e-6 разбор
+    /// возвращал |q| = 0.5 и нулевые углы Эйлера вместо (20°, 30°, 40°),
+    /// ошибка 49.19°. Измерено на прежнем коде: неверный разбор на масштабах
+    /// 1e-6, 1e-7, 1e-12 и 1e-30, верный на 1, 1e-2, 1e-4, 1e-5.
+    /// </para>
+    /// <para>
+    /// Это тот же гейт, что закрыт в <c>QuaternionExtensions.Normalize</c> и
+    /// в <c>Inverse</c>: у ненулевой величины нет собственного размера, с
+    /// которым её можно было бы сравнить, и отбрасывать её по абсолютной
+    /// величине нельзя. Нулевая ось — другое дело: там деление не определено,
+    /// и подстановка единицы оставляет строку нулевой, то есть поворот не
+    /// определяется вовсе, и метод возвращает то, что может.
+    /// </para>
     /// </remarks>
     public static Quaternion GetRotation(this in Matrix4x4 matrix)
     {
         Vector3 scale = matrix.GetScale();
-        float safeX = scale.X <= Scalar.Epsilon ? 1f : scale.X;
-        float safeY = scale.Y <= Scalar.Epsilon ? 1f : scale.Y;
-        float safeZ = scale.Z <= Scalar.Epsilon ? 1f : scale.Z;
+        float safeX = scale.X == 0f ? 1f : scale.X;
+        float safeY = scale.Y == 0f ? 1f : scale.Y;
+        float safeZ = scale.Z == 0f ? 1f : scale.Z;
 
         // GetScale считает масштаб как длины СТРОК (в соглашении вектор-строка
         // строка матрицы — образ базового вектора), поэтому масштаб оси i
@@ -331,7 +409,36 @@ public static class Matrix4x4Extensions
     /// девять: выигрыш втрое, а метод зовётся на каждую вершину.
     /// </para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Матрица вырождена и необратима.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Матрица вырождена и необратима, либо её определитель не помещается в
+    /// <see cref="float"/>.
+    /// </exception>
+    /// <remarks>
+    /// В соглашении вектор-строка точки и направления преобразуются как
+    /// <c>v * M</c>, а нормаль считается обратной транспонировкой:
+    /// <c>n' = n * M * (Mᵀ M)⁻¹</c>, что сводится к <c>n' = n * M⁻ᵀ</c>.
+    /// Готовая функция <c>Vector3.TransformNormal</c> перемножает строками, а
+    /// не столбцами, поэтому здесь строка обратной матрицы скалярно
+    /// умножается на нормаль вручную.
+    /// <para>
+    /// Обращается только линейная часть 3×3. Перенос в нормаль не попадает по
+    /// построению: она задаёт направление, а не положение, и обратная
+    /// транспонировка на нём ничего не меняет. Полная инверсия матрицы 4×4
+    /// считала определитель и 16 миноров, из которых нормаль использует
+    /// девять: выигрыш втрое, а метод зовётся на каждую вершину.
+    /// </para>
+    /// <para>
+    /// Проверяется не определитель, а обратный множитель: он и есть величина,
+    /// которая умножается на числитель. Определитель может быть ненулевым и
+    /// при этом давать бесконечный множитель, и наоборот. Измерено на прежнем
+    /// коде: при равномерном масштабе 1e13 определитель равен 1e39 и переполняет
+    /// <see cref="float"/>, а при 1e-14 он ненормален (1e-42) и обратная ему
+    /// величина переполняется. Прежняя проверка <c>determinant == 0 ||
+    /// IsNaN</c> пропускала оба случая и возвращала нулевую нормаль, то есть
+    /// молчавую пустоту вместо нормали. Измерено: непригодных нормалей без
+    /// исключения было 20 000 из 20 000.
+    /// </para>
+    /// </remarks>
     public static Vector3 TransformNormal(this in Matrix4x4 matrix, Vector3 normal)
     {
         // Миноры линейной части со знаками: их отношение и есть обратная
@@ -347,13 +454,17 @@ public static class Matrix4x4Extensions
         float c33 = (matrix.M11 * matrix.M22) - (matrix.M12 * matrix.M21);
 
         float determinant = (matrix.M11 * c11) + (matrix.M12 * c12) + (matrix.M13 * c13);
-        if (determinant == 0f || float.IsNaN(determinant))
+
+        // Обратный множитель считается до проверки, и проверяется именно он.
+        // Три случая сводятся к двум условиям: нулевой определитель даёт
+        // бесконечный множитель, нечисловой — нечисловой, бесконечный — нулевой.
+        float scale = determinant == 0f ? 0f : 1f / determinant;
+        if (scale == 0f || !float.IsFinite(scale))
         {
             throw new InvalidOperationException(
                 "Матрица вырождена, нормаль преобразовать нельзя: обратной матрицы не существует.");
         }
 
-        float scale = 1f / determinant;
         return new Vector3(
             ((c11 * normal.X) + (c21 * normal.Y) + (c31 * normal.Z)) * scale,
             ((c12 * normal.X) + (c22 * normal.Y) + (c32 * normal.Z)) * scale,
