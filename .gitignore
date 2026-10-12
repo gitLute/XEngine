@@ -380,6 +380,11 @@ tmp/*
 !tmp/.gitkeep
 img/
 
+# Артефакты ревизии: сборка агентов, зонды и scratch обратного хода.
+# Содержимое в историю не попадает намеренно. Сам BRIEF.md, REGISTRY.md,
+# отчёты и sessions.md под gitignore не попадают — их видеть полезно.
+revision/tmp/
+
 # Результат tools/AtlasBuilder (14.2): файлы собираются, вручную не правятся.
 assets/textures/atlas.png
 assets/textures/atlas.json
